@@ -1,0 +1,25 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+# OCR/Data
+data/
+uploads/
+datasets/
+
+# Models
+*.pt
+*.pth
+checkpoints/
+
+# Storage
+minio-data/
+postgres-data/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
