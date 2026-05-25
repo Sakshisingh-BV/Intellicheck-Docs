@@ -6,7 +6,7 @@ from app.preprocessing.cropper import isolate_document_region
 from app.preprocessing.rotation import correct_rotation
 
 
-IMAGE_PATH = "sample3.png"
+IMAGE_PATH = "sample4.jpg"
 
 # Load original
 original = load_image(IMAGE_PATH)

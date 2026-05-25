@@ -10,6 +10,16 @@ from app.preprocessing.blur import detect_blur
 
 
 def process_image(image_path):
+    """
+    Full preprocessing pipeline for document images.
+
+    Returns a dict with:
+        - processed_image: cleaned grayscale image (denoised + enhanced)
+        - ocr_ready_image: 3-channel BGR image suitable for PaddleOCR input
+        - binarized_image: black-on-white binarized image (for archival/display)
+        - blur_score: Laplacian variance blur metric
+        - is_blurry: whether the image is considered blurry
+    """
 
     # Step 1: Load image
     image = load_image(image_path)
@@ -32,8 +42,16 @@ def process_image(image_path):
     # Step 7: Thresholding / Binarization (produces clean black-on-white text)
     binarized = apply_adaptive_threshold(denoised)
 
+    # Step 8: Create OCR-ready 3-channel image from denoised grayscale
+    # PaddleOCR 3.5 requires 3-channel input; we use the denoised
+    # (not binarized) image because neural OCR models perform better
+    # on grayscale/enhanced images than hard-binarized ones.
+    ocr_ready = cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
+
     return {
-        "processed_image": binarized,
+        "processed_image": denoised,
+        "ocr_ready_image": ocr_ready,
+        "binarized_image": binarized,
         "blur_score": blur_result["blur_score"],
         "is_blurry": blur_result["is_blurry"]
     }
