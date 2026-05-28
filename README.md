@@ -88,27 +88,56 @@ documents
 
 ---
 
-## 8. VS Code MinIO Extension
+## 8. Run Backend and Test Upload
 
-Install extension:
+Run FastAPI backend:
 
-```text
-AWS Toolkit
+```bash id="c8z0fq"
+uvicorn app.main:app --reload
 ```
 
-because MinIO is S3-compatible.
+Open Swagger docs:
 
-Connection values:
-
-```text
-Access Key: minioadmin
-Secret Key: minioadmin
-Endpoint: http://127.0.0.1:9000
-Region: us-east-1
+```text id="q8d1jh"
+http://127.0.0.1:8000/docs
 ```
+
+Use the `/upload` endpoint to upload an image and verify that:
+
+* image upload works successfully
+* original image is stored in MinIO
+* preprocessed image is stored in MinIO
 
 ---
-Note: minio.exe is not pushed to GitHub because GitHub blocks files larger than 100 MB.
 
 ## 9. Important About Git Push
 
+Note: `minio.exe` is not pushed to GitHub because GitHub blocks files larger than 100 MB.
+
+---
+
+## 10. Important `.gitignore`
+
+Create:
+
+```text id="w5m2tx"
+.gitignore
+```
+
+Add:
+
+```text id="3u6yad"
+venv/
+minio-data/
+__pycache__/
+.env
+```
+
+So:
+
+* virtual env
+* MinIO storage
+* cache
+* secrets
+
+GitHub pe upload na ho.
