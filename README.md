@@ -108,53 +108,7 @@ Region: us-east-1
 ```
 
 ---
+Note: minio.exe is not pushed to GitHub because GitHub blocks files larger than 100 MB.
 
 ## 9. Important About Git Push
 
-If MinIO extension is NOT pushed to GitHub:
-
-NO ISSUE 👀
-
-Extensions are installed locally on YOUR machine only.
-
-They are usually stored somewhere like:
-
-```text
-C:\Users\<username>\.vscode\extensions
-```
-
-They are NOT part of your project folder.
-
-So:
-
-* GitHub pe push nahi hote
-* repo clone karne pe automatically nahi aate
-* har developer apni machine pe install karta hai
-
----
-
-## 10. Important `.gitignore`
-
-Create:
-
-```text
-.gitignore
-```
-
-Add:
-
-```text
-venv/
-minio-data/
-__pycache__/
-.env
-```
-
-So:
-
-* virtual env
-* MinIO storage
-* cache
-* secrets
-
-GitHub pe upload na ho.
