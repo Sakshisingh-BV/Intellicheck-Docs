@@ -1,143 +1,52 @@
-# MinIO Setup README
+# Intellicheck Docs (Python + MinIO Pipeline)
 
-## 1. Create Virtual Environment
+This project now runs as a Python-only script pipeline (no FastAPI runtime).
+
+## Setup
 
 ```bash
 python -m venv venv
+source venv/Scripts/activate
+pip install -r requirements.txt
 ```
 
-Activate:
-
-### PowerShell
+## Start MinIO
 
 ```bash
-.\venv\Scripts\Activate.ps1
+./minio.exe server minio-data
 ```
 
----
+Default endpoint used by the script: `127.0.0.1:9000`  
+Default bucket: `documents`
 
-## 2. Install Dependencies
+## Input File Flow (No CLI Args)
+
+1. Put your image in project root `inputs/`.
+2. Open `run_classification.py` and set:
+   - `INPUT_FILENAME = "your_file_name.png"`
+3. Run one command:
 
 ```bash
-pip install fastapi uvicorn minio python-multipart opencv-python
+python run_classification.py
 ```
 
----
+## Blur + Retry Logic
 
-## 3. Download MinIO
+- If `is_blurry = true` on quality check:
+  - script stops processing immediately
+  - prompts you to upload a clearer image in `inputs/`
+- If `is_blurry = false` but classification is `unknown`:
+  - script sharpens the already preprocessed image one more time
+  - reruns OCR + classification
+  - stores retry image in MinIO as:
+    - `data/<doc_id>/preprocessed/<input_stem>_preprocessed_retry.png`
+  - includes retry details in output JSON under `retry_info`
 
-Download:
+## Outputs
 
-https://dl.min.io/server/minio/release/windows-amd64/minio.exe
-
-Move:
-
-```text
-minio.exe
-```
-
-inside project root.
-
----
-
-## 4. Create MinIO Storage Folder
-
-Project root:
-
-```text
-minio-data/
-```
-
----
-
-## 5. Run MinIO
-
-```bash
-.\minio.exe server minio-data
-```
-
----
-
-## 6. Open MinIO Dashboard
-
-Terminal will show:
-
-```text
-API: http://127.0.0.1:9000
-WebUI: http://127.0.0.1:xxxxx
-```
-
-Open WebUI URL in browser.
-
-Login:
-
-```text
-username: minioadmin
-password: minioadmin
-```
-
----
-
-## 7. Create Bucket
-
-Create bucket:
-
-```text
-documents
-```
-
----
-
-## 8. Run Backend and Test Upload
-
-Run FastAPI backend:
-
-```bash id="c8z0fq"
-uvicorn app.main:app --reload
-```
-
-Open Swagger docs:
-
-```text id="q8d1jh"
-http://127.0.0.1:8000/docs
-```
-
-Use the `/upload` endpoint to upload an image and verify that:
-
-* image upload works successfully
-* original image is stored in MinIO
-* preprocessed image is stored in MinIO
-
----
-
-## 9. Important About Git Push
-
-Note: `minio.exe` is not pushed to GitHub because GitHub blocks files larger than 100 MB.
-
----
-
-## 10. Important `.gitignore`
-
-Create:
-
-```text id="w5m2tx"
-.gitignore
-```
-
-Add:
-
-```text id="3u6yad"
-venv/
-minio-data/
-__pycache__/
-.env
-```
-
-So:
-
-* virtual env
-* MinIO storage
-* cache
-* secrets
-
-GitHub pe upload na ho.
+- MinIO objects under:
+  - `data/<doc_id>/original/...`
+  - `data/<doc_id>/preprocessed/...`
+  - `data/<doc_id>/outputs/<input_stem>_result.json`
+- Local JSON file under:
+  - `data/<doc_id>/<input_stem>_result.json`
