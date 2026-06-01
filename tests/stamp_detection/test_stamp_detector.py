@@ -166,7 +166,7 @@ def run_all_tests():
     results['Model Loading'] = TestStampDetector.test_model_loading()
     
     # Test 2-4: Detection tests (use a sample image if available)
-    test_image = "data/rubberstamp.png"
+    test_image = "data/estamp2.png"
     if os.path.exists(test_image):
         results['Detection'] = TestStampDetector.test_detection_on_image(test_image)
         results['Visualization'] = TestStampDetector.test_visualization(
