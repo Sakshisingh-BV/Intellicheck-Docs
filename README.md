@@ -1,4 +1,4 @@
-## 11. Data Matrix Decoding (Indian e-Stamp Documents)
+## 1. Data Matrix Decoding (Indian e-Stamp Documents)
 
 Some Indian e-Stamp documents use **Data Matrix codes** instead of standard QR codes.
 
