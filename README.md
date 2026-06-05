@@ -47,15 +47,23 @@ If decode fails:
 
 ### Test Decoder
 
-Run:
-Note : PLease activate Virtual Enviornment 
+### Run Tests
 
+**Note:** Please activate the virtual environment before running the test script.
 
 ```bash
-  python tests/stamp_detection/test_stamp_detector_simple.py
+python tests/stamp_detection/test_stamp_detector_simple.py
+```
 
-AT line 163 of test_stamp_detector_simple.py you can change image path for testing.
+### Test a Different Image
 
+To test with a different image, update the image path in:
+
+```text
+tests/stamp_detection/test_stamp_detector_simple.py
+```
+
+Modify the image path at **line 163** and rerun the script.
 
 # MinIO Setup README
 
