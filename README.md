@@ -1,3 +1,60 @@
+## 11. Data Matrix Decoding (Indian e-Stamp Documents)
+
+Some Indian e-Stamp documents use **Data Matrix codes** instead of standard QR codes.
+
+### Install Dependency
+
+```bash
+pip install pylibdmtx
+```
+
+Add to `requirements.txt`:
+
+```text
+pylibdmtx
+```
+
+---
+
+### QR/Data Matrix Processing
+
+The project uses a dedicated:
+
+```text
+app/stamp_detection/qr_processor.py
+```
+
+module for decoding QR/Data Matrix codes.
+
+Workflow:
+
+```text
+Document Image
+    ↓
+Data Matrix Decode (pylibdmtx)
+    ↓
+If decode fails:
+    Grayscale
+    ↓
+    CLAHE Contrast Enhancement
+    ↓
+    2x Upscale
+    ↓
+    Retry Decode
+```
+
+---
+
+### Test Decoder
+
+Run:
+Note : PLease activate Virtual Enviornment 
+AT line 163 of test_stamp_detector_simple.py you can change image path for testing.
+
+```bash
+  python tests/stamp_detection/test_stamp_detector_simple.py
+
+
 # MinIO Setup README
 
 ## 1. Create Virtual Environment
