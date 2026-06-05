@@ -8,6 +8,7 @@ import os
 import re
 from typing import List, Dict, Optional
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 
 # Fix PyTorch 2.6+ security issue with model loading
 _original_load = torch.load
@@ -51,13 +52,17 @@ except ImportError:
         HAS_BLUR = False
         logger.warning("Blur module not available — OCR retry on blurry images disabled")
 
-# Optional: QR code reading
+# Barcode detection + decoding (Data Matrix primary, QR fallback)
 try:
-    import pyzbar.pyzbar as pyzbar
-    HAS_PYZBAR = True
+    from .qr_processor import QRProcessor
+    HAS_QR_PROCESSOR = True
 except ImportError:
-    HAS_PYZBAR = False
-    logger.warning("pyzbar not installed — QR code reading disabled")
+    try:
+        from qr_processor import QRProcessor
+        HAS_QR_PROCESSOR = True
+    except ImportError:
+        HAS_QR_PROCESSOR = False
+        logger.warning("QRProcessor not available — barcode processing disabled")
 
 
 class StampDetector:
@@ -82,13 +87,17 @@ class StampDetector:
             - signatures > 0
 
     Scoring weights:
-        certificate_number = 40
-        stamp_duty         = 25
-        state              = 15
-        date               = 10
-        qr_present         =  5   (contour-based, weak signal)
-        qr_decoded         =  5   (pyzbar decode, strong signal)
+        certificate_number = 40  (PRIMARY — sets context)
+        stamp_duty         = 25  (SECONDARY — requires context)
+        state              = 15  (SECONDARY — requires context)
+        date               = 10  (SECONDARY — requires context)
+        qr_present         =  2  (contour-based visual presence, weak signal)
+        qr_decoded         =  5  (decoded payload — pylibdmtx/pyzbar/OpenCV, strong)
         threshold          = 50
+
+    Context is established by certificate_number OR e-stamp keywords
+    (e-Stamp, SHCIL, Certificate No., etc.). Without context,
+    secondary fields do NOT contribute to the score.
     """
 
     CLASS_NAMES = {
@@ -102,8 +111,8 @@ class StampDetector:
         "stamp_duty": 25,
         "state": 15,
         "date": 10,
-        "qr_present": 5,    # weak signal: contour-based presence
-        "qr_decoded": 5,    # strong signal: pyzbar full decode
+        "qr_present": 2,    # weak signal: contour-based visual presence
+        "qr_decoded": 5,    # strong signal: decoded payload (pylibdmtx/pyzbar/OpenCV)
     }
     ESTAMP_THRESHOLD = 50
 
@@ -121,14 +130,22 @@ class StampDetector:
     ]
 
     def __init__(self, model_path: str = "app/models/best.pt",
-                 confidence_threshold: float = 0.5):
-        """Initialize detector — uses project OCREngine (PaddleOCR v3.5)."""
+                 confidence_threshold: float = 0.5,
+                 signature_confidence_threshold: float = 0.5):
+        """Initialize detector — uses project OCREngine (PaddleOCR v3.5).
+        
+        Args:
+            model_path: Path to YOLO model
+            confidence_threshold: Threshold for stamps (default 0.5)
+            signature_confidence_threshold: Threshold for signatures (default 0.5)
+        """
 
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model not found at {model_path}")
 
         self.model = YOLO(model_path)
         self.confidence_threshold = confidence_threshold
+        self.signature_confidence_threshold = signature_confidence_threshold
 
         # Reuse the project-wide OCR engine (PaddleOCR v3.5 compatible)
         if HAS_OCR:
@@ -140,6 +157,13 @@ class StampDetector:
                 self.ocr_engine = None
         else:
             self.ocr_engine = None
+
+        # Barcode processor (Data Matrix primary, QR fallback)
+        if HAS_QR_PROCESSOR:
+            self.qr_processor = QRProcessor()
+            logger.info("QRProcessor initialised (Data Matrix + QR detection/decoding)")
+        else:
+            self.qr_processor = None
 
         logger.info("✅ Enhanced Stamp Detector loaded (document-level e-stamp support)")
 
@@ -192,8 +216,12 @@ class StampDetector:
             # ----------------------------------------------------------
             # Step 1: Run YOLO detection (stamp / signature localization)
             # ----------------------------------------------------------
-            results = self.model(image, conf=self.confidence_threshold)
-            detections = self._parse_detections(image, results[0], return_crops)
+            # Use lower threshold to get all raw detections, then filter per-class
+            min_conf = min(self.confidence_threshold, self.signature_confidence_threshold)
+            results = self.model(image, conf=min_conf)
+            detections = self._parse_detections(image, results[0], return_crops,
+                                               stamp_conf=self.confidence_threshold,
+                                               sig_conf=self.signature_confidence_threshold)
 
             # ----------------------------------------------------------
             # Step 2: Full-page OCR with blur-aware retry
@@ -201,30 +229,29 @@ class StampDetector:
             full_text, blur_info = self._run_full_page_ocr(image)
 
             # ----------------------------------------------------------
-            # Step 3: QR detection (presence + decoding, independent)
+            # Step 3: QR detection + decoding (delegated to QRProcessor)
             # ----------------------------------------------------------
+            # Determine if document is likely an e-stamp (from OCR text)
+            # so the enhanced QR pipeline only triggers when warranted.
+            has_estamp_indicators = (
+                self._has_estamp_text_indicator(full_text)
+                or bool(self._extract_cert_number(full_text))
+            )
 
-            # 3a. QR presence detection (contour-based, works on low-res)
-            qr_present = self._detect_qr_presence(image)
-
-            # 3b. QR decoding via pyzbar (requires high-res)
-            qr_decoded = False
-            qr_data = None
-            for det in detections:
-                if det["label"] == "stamp" and det.get("crop") is not None:
-                    data = self._read_qr_code(det["crop"])
-                    if data:
-                        qr_decoded = True
-                        qr_data = data
-                        break
-            if not qr_decoded:
-                data = self._read_qr_code(image)
-                if data:
-                    qr_decoded = True
-                    qr_data = data
+            if self.qr_processor is not None:
+                qr_result = self.qr_processor.process(
+                    image, is_likely_estamp=has_estamp_indicators
+                )
+                qr_present = qr_result["qr_present"]
+                qr_decoded = qr_result["qr_decoded"]
+                qr_data = qr_result["qr_data"]
+            else:
+                qr_present = False
+                qr_decoded = False
+                qr_data = None
 
             logger.info(
-                f"QR detection: qr_present={qr_present}, "
+                f"Barcode detection: qr_present={qr_present}, "
                 f"qr_decoded={qr_decoded}"
             )
 
@@ -243,6 +270,13 @@ class StampDetector:
                 f"E-stamp score: {estamp_score}/{sum(self.ESTAMP_WEIGHTS.values())} "
                 f"(threshold={self.ESTAMP_THRESHOLD}) → "
                 f"document_type={document_type}"
+            )
+
+            # ----------------------------------------------------------
+            # Step 4b: QR vs certificate cross-validation (informational)
+            # ----------------------------------------------------------
+            qr_validation = self._validate_qr_vs_certificate(
+                qr_data, estamp_details.get("certificate_number")
             )
 
             # ----------------------------------------------------------
@@ -266,6 +300,8 @@ class StampDetector:
                 "qr_present": qr_present,
                 "qr_decoded": qr_decoded,
                 "qr_data": qr_data,
+                "qr_certificate_match": qr_validation.get("match"),
+                "qr_certificate_number": qr_validation.get("qr_cert_number"),
                 "estamp_score": estamp_score,
                 "estamp_threshold": self.ESTAMP_THRESHOLD,
                 "scoring_breakdown": estamp_details.get("scoring_breakdown", {}),
@@ -296,6 +332,8 @@ class StampDetector:
                     "qr_present": False,
                     "qr_decoded": False,
                     "qr_data": None,
+                    "qr_certificate_match": None,
+                    "qr_certificate_number": None,
                     "estamp_score": 0,
                     "estamp_threshold": self.ESTAMP_THRESHOLD,
                     "scoring_breakdown": {},
@@ -312,8 +350,17 @@ class StampDetector:
     # YOLO Parsing
     # ------------------------------------------------------------------
 
-    def _parse_detections(self, image: np.ndarray, result, return_crops: bool) -> List[Dict]:
-        """Parse YOLO results into detection dicts."""
+    def _parse_detections(self, image: np.ndarray, result, return_crops: bool,
+                          stamp_conf: float = 0.5, sig_conf: float = 0.5) -> List[Dict]:
+        """Parse YOLO results into detection dicts with per-class thresholds.
+        
+        Args:
+            image: Input image
+            result: YOLO result object
+            return_crops: Whether to return cropped images
+            stamp_conf: Confidence threshold for stamps
+            sig_conf: Confidence threshold for signatures
+        """
         detections = []
 
         if result.boxes is None or len(result.boxes) == 0:
@@ -327,6 +374,17 @@ class StampDetector:
                 bbox = boxes.xyxy[i].cpu().numpy().tolist()
 
                 label = self.CLASS_NAMES.get(class_id, "unknown")
+                
+                # Apply per-class confidence thresholds
+                if label == "stamp":
+                    if confidence < stamp_conf:
+                        logger.debug(f"Filtered stamp with confidence {confidence:.3f} < {stamp_conf}")
+                        continue
+                elif label == "signature":
+                    if confidence < sig_conf:
+                        logger.debug(f"Filtered signature with confidence {confidence:.3f} < {sig_conf}")
+                        continue
+                
                 crop = StampDetectionUtils.crop_detection(image, bbox)
 
                 # Check coloured ink (physical stamp indicator)
@@ -486,13 +544,15 @@ class StampDetector:
         """
         Compute a weighted e-stamp score from full-page OCR text.
 
-        Weights:
-            certificate_number  = 40
-            stamp_duty          = 25
-            state               = 15
-            date                = 10
-            qr_present          =  5  (contour-based, weak signal)
-            qr_decoded          =  5  (pyzbar full decode, strong signal)
+        Weights (context-aware):
+            certificate_number  = 40  (PRIMARY — establishes context)
+            stamp_duty          = 25  (SECONDARY — requires context)
+            state               = 15  (SECONDARY — requires context)
+            date                = 10  (SECONDARY — requires context)
+            qr_present          =  2  (weak signal, contour-based)
+            qr_decoded          =  5  (strong signal, pyzbar decode)
+
+        Context = certificate_number found OR e-stamp keyword detected.
 
         Returns:
             (score: int, details: dict)
@@ -500,8 +560,11 @@ class StampDetector:
         score = 0
         breakdown = {}
 
-        # --- Certificate number (weight 40) ---
         cert_number = self._extract_cert_number(full_text)
+        has_text_indicator = self._has_estamp_text_indicator(full_text)
+        has_estamp_context = bool(cert_number or has_text_indicator)
+
+        # --- Certificate number (weight 40, PRIMARY) ---
         if cert_number:
             score += self.ESTAMP_WEIGHTS["certificate_number"]
             breakdown["certificate_number"] = {
@@ -511,38 +574,58 @@ class StampDetector:
         else:
             breakdown["certificate_number"] = {"found": False, "points": 0}
 
-        # --- Stamp duty value (weight 25) ---
-        stamp_value = self._extract_stamp_value(full_text)
-        if stamp_value:
-            score += self.ESTAMP_WEIGHTS["stamp_duty"]
-            breakdown["stamp_duty"] = {
-                "found": True, "value": stamp_value,
-                "points": self.ESTAMP_WEIGHTS["stamp_duty"]
-            }
-        else:
-            breakdown["stamp_duty"] = {"found": False, "points": 0}
-
-        # --- State (weight 15) ---
         state = self._extract_state(full_text)
-        if state:
+        # State no longer sets context — it is itself gated by context
+
+        # --- State (weight 15, SECONDARY — only if e-stamp context) ---
+        if state and has_estamp_context:
             score += self.ESTAMP_WEIGHTS["state"]
             breakdown["state"] = {
                 "found": True, "value": state,
-                "points": self.ESTAMP_WEIGHTS["state"]
+                "points": self.ESTAMP_WEIGHTS["state"],
+                "awarded": "due to e-stamp context"
             }
         else:
-            breakdown["state"] = {"found": False, "points": 0}
+            breakdown["state"] = {
+                "found": bool(state),
+                "value": state,
+                "points": 0,
+                "reason": "requires e-stamp context" if state else "not found"
+            }
 
-        # --- Date (weight 10) ---
+        # --- Stamp duty value (weight 25, SECONDARY - only if e-stamp context) ---
+        stamp_value = self._extract_stamp_value(full_text)
+        if stamp_value and has_estamp_context:
+            score += self.ESTAMP_WEIGHTS["stamp_duty"]
+            breakdown["stamp_duty"] = {
+                "found": True, "value": stamp_value,
+                "points": self.ESTAMP_WEIGHTS["stamp_duty"],
+                "awarded": "due to e-stamp context"
+            }
+        else:
+            breakdown["stamp_duty"] = {
+                "found": bool(stamp_value),
+                "value": stamp_value,
+                "points": 0,
+                "reason": "requires e-stamp context" if stamp_value else "not found"
+            }
+
+        # --- Date (weight 10, SECONDARY - only if e-stamp context) ---
         date = self._extract_date(full_text)
-        if date:
+        if date and has_estamp_context:
             score += self.ESTAMP_WEIGHTS["date"]
             breakdown["date"] = {
                 "found": True, "value": date,
-                "points": self.ESTAMP_WEIGHTS["date"]
+                "points": self.ESTAMP_WEIGHTS["date"],
+                "awarded": "due to e-stamp context"
             }
         else:
-            breakdown["date"] = {"found": False, "points": 0}
+            breakdown["date"] = {
+                "found": bool(date),
+                "value": date,
+                "points": 0,
+                "reason": "requires e-stamp context" if date else "not found"
+            }
 
         # --- QR presence (weight 5, weak signal) ---
         if qr_present:
@@ -566,9 +649,12 @@ class StampDetector:
 
         details = {
             "certificate_number": cert_number,
-            "stamp_duty_value": stamp_value,
-            "state": state,
-            "date": date,
+            # Only surface secondary fields when e-stamp context exists;
+            # raw extracted values are still in scoring_breakdown for debugging
+            "stamp_duty_value": stamp_value if has_estamp_context else None,
+            "state": state if has_estamp_context else None,
+            "date": date if has_estamp_context else None,
+            "has_estamp_context": has_estamp_context,
             "scoring_breakdown": breakdown,
         }
 
@@ -591,7 +677,7 @@ class StampDetector:
             return None
 
         patterns = [
-            r'IN-[A-Z]{2}\d{14,20}',                   # SHCIL format
+            r'IN-[A-Z]{2}\d{14,20}[A-Z]?',             # SHCIL format (with optional trailing letter like V, X)
             r'[A-Z]{2,3}-\d{6}-\d{6}',                  # State-date-serial
             r'[Cc]ertificate\s*(?:[Nn]o\.?|#)\s*[:.]?\s*([A-Z0-9\-]+)',
         ]
@@ -604,25 +690,50 @@ class StampDetector:
         return None
 
     def _extract_stamp_value(self, text: str) -> Optional[str]:
-        """Extract stamp duty value (e.g. Rs. 100, INR 500, ₹ 1,000.00)."""
+        """Extract stamp duty value - handle multiple formats"""
         if not text:
             return None
 
         patterns = [
-            r'(?:Rs\.?|INR|₹)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
-            r'[Ss]tamp\s*[Dd]uty\s*(?:of|:)?\s*(?:Rs\.?|INR|₹)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
+            # Format: "Stamp Duty Amount(Rs.) : 100"
+            r'[Ss]tamp\s+[Dd]uty\s+(?:Amount)?\s*\(?Rs\.?\)?(?:\s*[:=])?\s*(\d{1,5}(?:,\d{3})*(?:\.\d{2})?)',
+            # Format: "Rs. 100" or "₹ 100" — require ≥2 digits to avoid day-of-month
+            r'(?:Rs\.?|INR|₹)\s*(\d{2,5}(?:,\d{3})*(?:\.\d{2})?)',
+            # Format: "Consideration Price ... 100"
+            r'[Cc]onsideration\s+[Pp]rice.*?(\d{1,5}(?:,\d{3})*(?:\.\d{2})?)',
+            # Format: "100 only"
+            r'(\d{1,5}(?:,\d{3})*)\s+[Oo]nly',
         ]
 
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1)
+                value = match.group(1)
+                logger.info(f"Stamp duty extracted: {value}")
+                return value
 
         return None
 
     def _extract_state(self, text: str) -> Optional[str]:
-        """Extract issuing state from text."""
+        """Extract issuing state from e-stamp context."""
         if not text:
+            return None
+
+        state_names = "|".join(re.escape(state) for state in self.KNOWN_STATES)
+
+        labeled_patterns = [
+            rf'\bstate\s*(?:of)?\s*(?:issue|issuance|certificate)?\s*[:=\-]?\s*({state_names})\b',
+            rf'\bissued\s+in\s+the\s+state\s+of\s+({state_names})\b',
+            rf'\bgovernment\s+of\s+({state_names})\b',
+            rf'\bgovernment\s+of\s+NCT\s+of\s+({state_names})\b',
+        ]
+
+        for pattern in labeled_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return self._canonical_state_name(match.group(1))
+
+        if not self._has_estamp_text_indicator(text):
             return None
 
         text_lower = text.lower()
@@ -632,129 +743,172 @@ class StampDetector:
 
         return None
 
+    def _canonical_state_name(self, value: str) -> Optional[str]:
+        """Return the configured state spelling for a matched state value."""
+        value_lower = value.lower()
+        for state in self.KNOWN_STATES:
+            if state.lower() == value_lower:
+                return state
+        return None
+
+    def _has_estamp_text_indicator(self, text: str) -> bool:
+        """Detect document-level e-stamp wording without relying on amounts or dates."""
+        if not text:
+            return False
+
+        patterns = [
+            r'\be[\s\-]?stamp(?:ing|ed)?\b',
+            r'\belectronic\s+stamp(?:ing)?\b',
+            r'\bshcil\b',
+            r'\bstock\s+holding\s+corporation\b',
+            r'\bstock\s+holding\b',
+            r'\bcertificate\s*(?:no\.?|number|#)\b',
+            r'\bunique\s+(?:document|doc|identification)\s+(?:reference|number|no\.?)\b',
+            r'\baccount\s+reference\b',
+            r'\bcertificate\s+issued\s+date\b',
+            r'\bstamp\s+duty\s+paid\s+by\b',
+            r'\bfirst\s+party\b',
+            r'\bsecond\s+party\b',
+            r'\bdescription\s+of\s+document\b',
+            r'\bwww\.shcilestamp\.com\b',
+            r'\bconsideration\s+price\b',
+            r'\bgovernment\s+of\s+NCT\b',
+        ]
+
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
     def _extract_date(self, text: str) -> Optional[str]:
-        """Extract issue date from text."""
+        """Extract issue date - handle multiple formats"""
         if not text:
             return None
 
         patterns = [
-            r'(\d{2}[/-]\d{2}[/-]\d{4})',   # DD/MM/YYYY or DD-MM-YYYY
-            r'(\d{4}[/-]\d{2}[/-]\d{2})',    # YYYY-MM-DD
-            r'(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})',
+            # Format: "14-Dec-2023 05:54 PM"
+            r'(\d{1,2})-([A-Za-z]{3})-(\d{4})',
+            # Format: "14-12-2023"
+            r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})',
+            # Format: "2023-12-14"
+            r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})',
+            # Format: "14 December 2023"
+            r'(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})',
+            # Format with word "Date:"
+            r'[Dd]ate\s*[:=]\s*(\d{1,2}[/-]?[A-Za-z0-9\-]+)',
         ]
 
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1)
+                date_str = match.group(0)
+                logger.info(f"Date extracted: {date_str}")
+                return date_str
 
         return None
-
     # ------------------------------------------------------------------
-    # QR Code: Presence Detection (contour-based, works on low-res)
+    # QR vs Certificate Cross-Validation (informational only)
     # ------------------------------------------------------------------
 
-    def _detect_qr_presence(self, image: np.ndarray) -> bool:
+    def _validate_qr_vs_certificate(
+        self, qr_data: Optional[str], ocr_cert_number: Optional[str]
+    ) -> Dict:
         """
-        Detect if a QR-like pattern is visually present in the image.
+        Compare certificate number from QR payload against OCR-extracted
+        certificate number.
 
-        Uses contour analysis to find QR finder patterns (nested squares).
-        Does NOT decode the QR data — only checks for the visual pattern.
-        Works on low-resolution images where pyzbar fails.
+        This is informational validation only — it does NOT affect
+        estamp scoring or document_type.
 
-        A QR code has 3 finder patterns (concentric squares) at corners.
-        We look for square-ish contours that contain nested child squares.
-        If we find >= 2 such patterns, we consider QR present.
+        Returns:
+            {
+                "match": True | False | None,
+                    True  = both found and they match
+                    False = both found but they differ
+                    None  = one or both not available (comparison not possible)
+                "qr_cert_number": str | None
+            }
         """
-        try:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        if not qr_data:
+            return {"match": None, "qr_cert_number": None}
 
-            # Adaptive threshold handles varying lighting
-            binary = cv2.adaptiveThreshold(
-                gray, 255,
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY,
-                blockSize=51,
-                C=10
-            )
+        # Try to extract a certificate number from the QR payload
+        qr_cert = self._extract_cert_number(qr_data)
 
-            contours, hierarchy = cv2.findContours(
-                binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
-            )
+        # If regex didn't match, try URL/query-parameter extraction
+        if not qr_cert:
+            qr_cert = self._extract_cert_from_url(qr_data)
 
-            if hierarchy is None:
-                return False
-
-            hierarchy = hierarchy[0]  # shape: (N, 4) — [next, prev, child, parent]
-
-            finder_candidates = 0
-
-            for i, contour in enumerate(contours):
-                # Skip tiny contours (noise)
-                area = cv2.contourArea(contour)
-                if area < 100:
-                    continue
-
-                # Check if contour is roughly square
-                x, y, w, h = cv2.boundingRect(contour)
-                if h == 0 or w == 0:
-                    continue
-                aspect_ratio = float(w) / float(h)
-                if not (0.7 <= aspect_ratio <= 1.3):
-                    continue
-
-                # Check for nested structure (parent → child → grandchild)
-                # QR finder pattern = 3 levels of nesting
-                child_idx = hierarchy[i][2]
-                if child_idx == -1:
-                    continue
-
-                # Check child is also roughly square
-                child_contour = contours[child_idx]
-                child_area = cv2.contourArea(child_contour)
-                if child_area < 30:
-                    continue
-                cx, cy, cw, ch = cv2.boundingRect(child_contour)
-                if ch == 0 or cw == 0:
-                    continue
-                child_aspect = float(cw) / float(ch)
-                if not (0.6 <= child_aspect <= 1.4):
-                    continue
-
-                # Check grandchild exists (3-level nesting)
-                grandchild_idx = hierarchy[child_idx][2]
-                if grandchild_idx != -1:
-                    finder_candidates += 1
-
-            # QR code has 3 finder patterns; >= 2 is strong evidence
-            is_present = finder_candidates >= 2
+        if not qr_cert:
             logger.debug(
-                f"QR presence: {finder_candidates} finder-like patterns → "
-                f"{'present' if is_present else 'not found'}"
+                "QR validation: could not extract certificate number from QR data"
             )
-            return is_present
+            return {"match": None, "qr_cert_number": None}
 
-        except Exception as e:
-            logger.debug(f"QR presence detection error: {e}")
-            return False
+        if not ocr_cert_number:
+            logger.debug(
+                f"QR validation: QR cert={qr_cert}, but OCR cert not available"
+            )
+            return {"match": None, "qr_cert_number": qr_cert}
 
-    # ------------------------------------------------------------------
-    # QR Code: Decoding (pyzbar, requires high-res)
-    # ------------------------------------------------------------------
+        # Normalise for comparison (strip whitespace, uppercase)
+        qr_norm = qr_cert.strip().upper()
+        ocr_norm = ocr_cert_number.strip().upper()
 
-    def _read_qr_code(self, image: np.ndarray) -> Optional[str]:
-        """Attempt to fully decode QR data from image using pyzbar."""
-        if not HAS_PYZBAR:
-            return None
+        is_match = qr_norm == ocr_norm
 
+        logger.info(
+            f"QR validation: qr_cert={qr_cert}, ocr_cert={ocr_cert_number}, "
+            f"match={is_match}"
+        )
+
+        return {"match": is_match, "qr_cert_number": qr_cert}
+
+    def _extract_cert_from_url(self, text: str) -> Optional[str]:
+        """
+        Extract certificate number from a URL query parameter.
+
+        Handles common e-stamp verification URLs like:
+            https://www.shcilestamp.com/verify?cert=IN-DL12854...
+            https://estamp.gov.in/verify?certificate_number=MH-240101-123456
+        """
         try:
-            decoded = pyzbar.decode(image)
-            if decoded:
-                return decoded[0].data.decode('utf-8')
-            return None
+            parsed = urlparse(text.strip())
+            if not parsed.scheme or not parsed.netloc:
+                return None
+
+            params = parse_qs(parsed.query)
+
+            # Common parameter names for certificate number
+            param_names = [
+                "cert", "certificate", "certificate_number",
+                "certno", "cert_no", "certificateno",
+                "id", "ref", "refno",
+            ]
+
+            for name in param_names:
+                values = params.get(name)
+                if values:
+                    # Try to validate the value looks like a cert number
+                    candidate = values[0]
+                    verified = self._extract_cert_number(candidate)
+                    if verified:
+                        return verified
+                    # If it doesn't match known patterns but is alphanumeric,
+                    # return it as-is (some states use non-standard formats)
+                    if re.match(r'^[A-Z0-9\-]{6,}$', candidate, re.IGNORECASE):
+                        return candidate
+
+            # Fallback: try extracting cert number from full URL string
+            # (some URLs embed the cert number in the path)
+            return self._extract_cert_number(parsed.path)
+
         except Exception as e:
-            logger.debug(f"QR decode error: {e}")
+            logger.debug(f"URL cert extraction error: {e}")
             return None
+
+    # ------------------------------------------------------------------
+    # Barcode: Detection + Decoding → delegated to QRProcessor
+    # ------------------------------------------------------------------
+    # All barcode logic (Data Matrix primary, QR fallback) lives in
+    # qr_processor.py. See Step 3 in detect() above.
 
     # ------------------------------------------------------------------
     # Anomaly Detection (per-crop)

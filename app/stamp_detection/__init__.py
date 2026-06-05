@@ -2,5 +2,6 @@
 
 from .detector import StampDetector
 from .utils import StampDetectionUtils
+from .qr_processor import QRProcessor
 
-__all__ = ["StampDetector", "StampDetectionUtils"]
+__all__ = ["StampDetector", "StampDetectionUtils", "QRProcessor"]

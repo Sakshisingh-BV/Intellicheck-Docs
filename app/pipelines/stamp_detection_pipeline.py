@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from app.stamp_detection import StampDetector
+from app.stamp_detection.utils import StampDetectionUtils
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,14 @@ class StampDetectionPipeline:
             elif detection["label"] == "signature":
                 analysis["signatures"].append(detection)
                 analysis["signature_count"] += 1
-        
+
+        # Overlapping stamp detection (reuses existing utility)
+        image_shape = detection_result.get("image_shape")
+        overlap_result = StampDetectionUtils.check_overlapping_stamps(
+            detections, image_shape
+        )
+        analysis["overlap_analysis"] = overlap_result
+
         return analysis
 
     def process_with_visualization(self, preprocessed_image: np.ndarray,
