@@ -30,8 +30,7 @@ class AddressExtractor:
         "agra", "nashik", "faridabad", "meerut", "rajkot", "varanasi",
         "srinagar", "aurangabad", "dhanbad", "amritsar", "navi mumbai",
         "allahabad", "prayagraj", "ranchi", "howrah", "coimbatore",
-        "jabalpur", "gwalior", "vijayawada", "jodhpur", "madurai",
-        "raipur", "kochi", "chandigarh", "mysore", "mysuru",
+        "raipur", "kochi", "chandigarh", "mysore", "mysuru", "greater noida",
         "noida", "gurgaon", "gurugram", "dehradun",
     ]
 
@@ -170,6 +169,14 @@ class AddressExtractor:
         city: Optional[str],
     ) -> str:
         """Remove pincode/city/state from address line to get just street info."""
+        # Strip relation/care-of prefixes (e.g., D/O Sanjay Singh, S/O Kumar) at the start
+        line = re.sub(
+            r'^(?:[dswc]/[o0])\s+[a-z\s\.]+?(?:,\s*|\s+)',
+            '',
+            line.strip(),
+            flags=re.IGNORECASE
+        )
+
         if pincode:
             line = line.replace(pincode, "")
         if state:

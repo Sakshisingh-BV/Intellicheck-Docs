@@ -55,13 +55,16 @@ class AddressMatcher:
             mismatched.append("city")
             scores["city"] = city_sim
 
-        # 4. Line1: fuzzy match (most variation here)
-        line1_sim = AddressMatcher._similarity(
-            customer_addr.get("line1", ""), doc_addr.get("line1", "")
-        )
-        if line1_sim > AddressMatcher.SIMILARITY_THRESHOLD:
+        # 4. Line1: fuzzy match + containment match (most variation here)
+        line1_cust = customer_addr.get("line1", "")
+        line1_doc = doc_addr.get("line1", "")
+        
+        line1_sim = AddressMatcher._similarity(line1_cust, line1_doc)
+        is_contained = AddressMatcher._check_containment(line1_cust, line1_doc)
+        
+        if line1_sim > AddressMatcher.SIMILARITY_THRESHOLD or is_contained:
             matched.append("line1")
-            scores["line1"] = line1_sim
+            scores["line1"] = max(line1_sim, 1.0 if is_contained else 0.0)
         else:
             mismatched.append("line1")
             scores["line1"] = line1_sim
@@ -87,6 +90,31 @@ class AddressMatcher:
             "mismatched_fields": mismatched,
             "reason": reason,
         }
+
+    @staticmethod
+    def _check_containment(text1: str, text2: str) -> bool:
+        """Check if one normalized address is contained within the other after removing common terms."""
+        import re
+        common_words = {
+            "house", "no", "flat", "plot", "apartment", "apt", "near", 
+            "opposite", "opp", "sector", "pocket", "pock", "sec", "block"
+        }
+        
+        def compress(text: str) -> str:
+            t = text.lower().strip()
+            # Keep alphanumeric and spaces
+            t = re.sub(r'[^a-z0-9\s]', ' ', t)
+            words = t.split()
+            filtered = [w for w in words if w not in common_words]
+            return "".join(filtered)
+            
+        comp1 = compress(text1)
+        comp2 = compress(text2)
+        
+        if len(comp1) < 2 or len(comp2) < 2:
+            return False
+            
+        return (comp1 in comp2) or (comp2 in comp1)
 
     @staticmethod
     def _similarity(text1: str, text2: str) -> float:

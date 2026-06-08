@@ -272,7 +272,7 @@ def generate_status(docs: list) -> dict:
     for doc in docs:
         conf = _get_classification(doc).get("confidence", 0.0)
         doc_type = _get_doc_type(doc)
-        if doc_type != "unknown" and conf < 0.5:
+        if doc_type != "unknown" and conf < 0.3:
             low_confidence = True
             reasons.append(f"Low classification confidence for {doc_type}: {conf:.2f}")
 

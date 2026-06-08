@@ -3,7 +3,7 @@ class OCRFormatter:
     @staticmethod
     def format(parsed_results, image_name):
         # Extract all text in order
-        full_text = " ".join(
+        full_text = "\n".join(
             block.get("text", "") for block in parsed_results
         ).strip()
 
