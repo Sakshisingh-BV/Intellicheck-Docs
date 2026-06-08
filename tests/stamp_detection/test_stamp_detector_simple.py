@@ -83,7 +83,7 @@ def test_detection_on_image(image_path: str):
         print(f"   QR Present: {fields.get('qr_present')}")
         print(f"   QR Decoded: {fields.get('qr_decoded')}")
         if fields.get('qr_data'):
-            print(f"   QR Data: {fields['qr_data'][:50]}...")
+           print(f"   QR Data (full): {fields['qr_data']}")
         print(f"   Cert Match: {fields.get('qr_certificate_match')}")
         
         # ========== E-STAMP SCORE ==========
@@ -160,7 +160,7 @@ def collect_images(args):
         base_dir = 'data'
     else:
         # Default: single canonical e-stamp sample
-        return ['data/Stamp5.png']
+        return ['data/Stamp1.png']
 
     images = []
     for ext in SUPPORTED_EXTS:

@@ -342,7 +342,14 @@ class StampDetector:
                     "ocr_retried": False,
                 },
                 "detections": [],
-                "summary": {"error": str(e)},
+                "summary": {
+                    "total_detections": 0,
+                    "physical_stamps": 0,
+                    "signatures": 0,
+                    "detections_with_anomalies": 0,
+                    "overall_confidence": 0.0,
+                    "error": str(e),
+                },
                 "image_shape": None
             }
 
