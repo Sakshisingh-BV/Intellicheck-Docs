@@ -14,43 +14,12 @@ Supports: PDF, JPG, JPEG, PNG
 
 import os
 import sys
-import tempfile
 import numpy as np
 
 # Ensure project root is on Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# ── PDF → Image conversion ───────────────────────────────────────────────
-
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
-
-
-def pdf_to_images(pdf_path: str) -> list:
-    """
-    Convert each page of a PDF to a temporary PNG file.
-    Returns list of temp image file paths.
-    """
-    import pypdfium2 as pdfium
-
-    doc = pdfium.PdfDocument(pdf_path)
-    image_paths = []
-
-    for i in range(len(doc)):
-        page = doc[i]
-        # Render at 300 DPI for good OCR quality
-        bitmap = page.render(scale=300 / 72)
-        pil_image = bitmap.to_pil()
-
-        tmp = tempfile.NamedTemporaryFile(
-            delete=False, suffix=f"_page{i + 1}.png"
-        )
-        pil_image.save(tmp.name)
-        tmp.close()
-        image_paths.append(tmp.name)
-        print(f"  PDF page {i + 1} -> {os.path.basename(tmp.name)}")
-
-    doc.close()
-    return image_paths
 
 
 # ── Input helpers ─────────────────────────────────────────────────────────
@@ -108,77 +77,38 @@ def get_document_paths() -> list:
 
 # ── Core processing ──────────────────────────────────────────────────────
 
-def process_single_image(image_path: str, ocr_pipeline, classification_pipeline) -> dict:
-    """
-    Run OCR + Classification on a single image.
-    Returns a processed document dict compatible with proof_check.
-    """
-    # OCR
-    parsed_result, formatted_result, quality_info = ocr_pipeline.run(
-        image_path, check_quality=False
-    )
-
-    # Classification
-    classification_result = classification_pipeline.run(parsed_result)
-
-    return {
-        "filename": os.path.basename(image_path),
-        "ocr_result": formatted_result,
-        "classification": classification_result.to_dict(),
-        "quality": quality_info,
-    }
-
-
 def process_documents(file_paths: list) -> list:
     """
-    Process all documents. PDFs are split into pages first.
+    Process all documents through the full pipeline.
+    PDFs are parsed via the project's PDFParser module.
     Returns list of processed document dicts.
     """
-    from app.pipelines.ocr_pipeline import OCRPipeline
-    from app.pipelines.classification_pipeline import ClassificationPipeline
+    from app.services.document_processor import DocumentProcessor
 
-    ocr_pipeline = OCRPipeline()
-    classification_pipeline = ClassificationPipeline()
-
+    processor = DocumentProcessor(use_minio=False)
     processed_docs = []
-    temp_files = []
 
-    try:
-        for path in file_paths:
-            ext = os.path.splitext(path)[1].lower()
-            print(f"\nProcessing: {os.path.basename(path)}")
+    for path in file_paths:
+        ext = os.path.splitext(path)[1].lower()
+        print(f"\nProcessing: {os.path.basename(path)}")
 
-            if ext == ".pdf":
-                print("  Converting PDF to images...")
-                page_images = pdf_to_images(path)
-                temp_files.extend(page_images)
+        result = processor.process_document(str(path))
 
-                for img_path in page_images:
-                    print(f"  Running OCR on {os.path.basename(img_path)}...")
-                    doc = process_single_image(
-                        img_path, ocr_pipeline, classification_pipeline
-                    )
-                    doc["source_file"] = os.path.basename(path)
-                    processed_docs.append(doc)
-            else:
-                print("  Running OCR...")
-                doc = process_single_image(
-                    path, ocr_pipeline, classification_pipeline
-                )
-                doc["source_file"] = os.path.basename(path)
-                processed_docs.append(doc)
-
-            doc_type = processed_docs[-1]["classification"]["document_type"]
-            confidence = processed_docs[-1]["classification"]["confidence"]
+        if ext == ".pdf":
+            # For PDFs, each page is a separate document for verification
+            for page in result.get("pages", []):
+                page["source_file"] = os.path.basename(path)
+                processed_docs.append(page)
+                doc_type = page.get("classification", {}).get("document_type", "unknown")
+                confidence = page.get("classification", {}).get("confidence", 0)
+                page_num = page.get("page_number", "?")
+                print(f"  Page {page_num}: {doc_type} (confidence: {confidence:.2f})")
+        else:
+            result["source_file"] = os.path.basename(path)
+            processed_docs.append(result)
+            doc_type = result.get("classification", {}).get("document_type", "unknown")
+            confidence = result.get("classification", {}).get("confidence", 0)
             print(f"  Detected: {doc_type} (confidence: {confidence:.2f})")
-
-    finally:
-        # Clean up temp files from PDF conversion
-        for tmp in temp_files:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
 
     return processed_docs
 
@@ -329,6 +259,18 @@ def main():
     print("PROCESSING DOCUMENTS")
     print("=" * 50)
     processed_docs = process_documents(file_paths)
+
+    # Ensure all docs have the expected keys for downstream consumers
+    for doc in processed_docs:
+        if "classification" not in doc:
+            doc["classification"] = {
+                "document_type": "unknown",
+                "display_name": "Unknown Document",
+                "confidence": 0.0,
+                "matched_keywords": [],
+                "extracted_fields": {},
+                "all_scores": {},
+            }
 
     if not processed_docs:
         print("\nNo documents could be processed. Exiting.")
