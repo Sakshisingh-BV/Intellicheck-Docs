@@ -2,7 +2,7 @@
 Document processing service layer.
 
 Shared by both FastAPI routes and CLI scripts.
-Orchestrates preprocessing → OCR → classification flow.
+Orchestrates preprocessing → OCR → classification → stamp detection flow.
 MinIO integration is optional.
 """
 
@@ -12,14 +12,20 @@ import cv2
 import uuid
 import tempfile
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, List
 
 from app.preprocessing.utils import load_image
 from app.preprocessing.blur import detect_blur, sharpen_image
+from app.document_parsing import PDFParser
 from app.pipelines.ocr_pipeline import OCRPipeline
 from app.pipelines.classification_pipeline import ClassificationPipeline
+from app.pipelines.stamp_detection_pipeline import StampDetectionPipeline
 
 logger = logging.getLogger(__name__)
+
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+PDF_EXTENSION = ".pdf"
 
 
 class DocumentProcessor:
@@ -40,6 +46,10 @@ class DocumentProcessor:
         """
         self.ocr_pipeline = OCRPipeline()
         self.classification_pipeline = ClassificationPipeline()
+        self.stamp_pipeline = StampDetectionPipeline(
+            ocr_engine=self.ocr_pipeline.engine
+        )
+        self.pdf_parser = PDFParser()
         self.use_minio = use_minio
         self.minio_client = None
         self.bucket_name = None
@@ -59,21 +69,24 @@ class DocumentProcessor:
         image_path: str,
         doc_id: Optional[str] = None,
         save_minio: bool = False,
+        output_dir: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Process a document from image file to final results.
+        Process a document from an image or PDF file to final results.
 
         Pipeline:
-            1. Load image
+            1. Parse input document (PDF pages become images)
             2. Preprocessing (quality check, sharpening)
             3. OCR (parse + format)
             4. Classification
+            5. Stamp / signature / QR detection
 
         Args:
-            image_path: Path to input image file.
+            image_path: Path to input image or PDF file.
             doc_id: Optional document ID (generated if not provided).
             save_minio: If True and MinIO configured, save intermediate results.
+            output_dir: Optional directory path to save visualization images.
             **kwargs: Additional metadata to include in response.
 
         Returns:
@@ -83,20 +96,71 @@ class DocumentProcessor:
                 - quality (blur_score, is_blurry, blur_level)
                 - ocr_result (formatted OCR output)
                 - classification (document type, confidence, etc.)
+                - stamp_detection (stamps, signatures, QR, bounding boxes)
                 - preprocessing (saved object keys if saved to MinIO)
                 - status
                 - error (if processing failed)
                 - traceback (if processing failed)
         """
         doc_id = doc_id or str(uuid.uuid4())
-        filename = os.path.basename(image_path)
+        metadata = dict(kwargs)
+        filename = metadata.pop("filename", os.path.basename(image_path))
+        extension = os.path.splitext(filename)[1].lower()
+
+        if extension == PDF_EXTENSION:
+            return self._process_pdf_document(
+                image_path,
+                doc_id=doc_id,
+                save_minio=save_minio,
+                filename=filename,
+                output_dir=output_dir,
+                **metadata
+            )
+
+        if extension not in IMAGE_EXTENSIONS:
+            return {
+                "doc_id": doc_id,
+                "filename": filename,
+                "status": "unsupported_file_type",
+                "error": f"Unsupported document type: {extension or 'unknown'}",
+                "classification": self._unknown_classification(),
+            }
+
+        return self._process_image_document(
+            image_path,
+            doc_id=doc_id,
+            save_minio=save_minio,
+            filename=filename,
+            output_dir=output_dir,
+            **metadata
+        )
+
+    def _process_image_document(
+        self,
+        image_path: str,
+        doc_id: str,
+        save_minio: bool = False,
+        filename: Optional[str] = None,
+        page_number: Optional[int] = None,
+        source_file: Optional[str] = None,
+        output_dir: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        filename = filename or os.path.basename(image_path)
 
         result = {
             "doc_id": doc_id,
             "filename": filename,
+            "file_type": "image",
             "status": "processing",
-            "classification": None,  # Initialize classification field
+            "classification": None,
+            "stamp_detection": None,
         }
+
+        if page_number is not None:
+            result["page_number"] = page_number
+        if source_file:
+            result["source_file"] = source_file
 
         # Merge any additional metadata
         result.update(kwargs)
@@ -140,7 +204,7 @@ class DocumentProcessor:
                         original_key,
                         data=io.BytesIO(original_data),
                         length=len(original_data),
-                        content_type="image/png",
+                        content_type=self._content_type_for_filename(filename),
                     )
 
                     # Save preprocessed
@@ -165,8 +229,9 @@ class DocumentProcessor:
             # ── Step 3: Run OCR ──
             logger.info(f"Running OCR for {doc_id}")
             parsed_result, formatted_result, _ = self.ocr_pipeline.run(
-                image_path,
+                image,
                 check_quality=False,  # Already checked above
+                image_name=filename,
             )
 
             result["ocr_result"] = formatted_result
@@ -176,24 +241,311 @@ class DocumentProcessor:
             classification_result = self.classification_pipeline.run(parsed_result)
             result["classification"] = classification_result.to_dict()
 
+            # ── Step 5: Stamp / Signature / QR Detection ──
+            logger.info(f"Running stamp detection for {doc_id}")
+            stamp_result = self.stamp_pipeline.process(
+                image,
+                image_path=image_path,
+                ocr_text=formatted_result.get("text", ""),
+            )
+            result["stamp_detection"] = self._serialize_stamp_result(stamp_result)
+
+            # Save bounding box visualization if output_dir is set
+            if output_dir and stamp_result.get("success"):
+                self._save_detection_visualization(
+                    image, stamp_result, output_dir, filename, page_number
+                )
+
             result["status"] = "completed"
 
         except Exception as e:
             logger.error(f"Error processing {doc_id}: {e}", exc_info=True)
             result["status"] = "processing_failed"
             result["error"] = str(e)
-            result["classification"] = result["classification"] or {
-                "document_type": "unknown",
-                "display_name": "Unknown Document",
-                "confidence": 0.0,
-                "matched_keywords": [],
-                "extracted_fields": {},
-                "all_scores": {}
-            }
+            result["classification"] = result["classification"] or self._unknown_classification()
+            result["stamp_detection"] = result["stamp_detection"] or {"success": False, "error": str(e)}
             import traceback
             result["traceback"] = traceback.format_exc()
 
         return result
+
+    def _process_pdf_document(
+        self,
+        pdf_path: str,
+        doc_id: str,
+        save_minio: bool = False,
+        filename: Optional[str] = None,
+        output_dir: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        filename = filename or os.path.basename(pdf_path)
+        result = {
+            "doc_id": doc_id,
+            "filename": filename,
+            "file_type": "pdf",
+            "status": "processing",
+            "classification": None,
+            "stamp_detection": None,
+        }
+        result.update(kwargs)
+
+        page_images = []
+
+        try:
+            logger.info(f"Rendering PDF {filename} (doc_id={doc_id})")
+            page_images = self.pdf_parser.parse(pdf_path)
+
+            pages = []
+            for page_image in page_images:
+                page_result = self._process_image_document(
+                    page_image.image_path,
+                    doc_id=f"{doc_id}-page-{page_image.page_number}",
+                    save_minio=save_minio,
+                    filename=f"{os.path.splitext(filename)[0]}_page{page_image.page_number}.png",
+                    page_number=page_image.page_number,
+                    source_file=filename,
+                    output_dir=output_dir,
+                )
+                pages.append(page_result)
+
+            result["page_count"] = len(pages)
+            result["pages"] = pages
+            result["ocr_result"] = self._merge_page_ocr(filename, pages)
+            result["classification"] = self._best_page_classification(pages)
+            result["stamp_detection"] = self._aggregate_stamp_detections(pages)
+            result["status"] = (
+                "completed"
+                if pages and all(page["status"] == "completed" for page in pages)
+                else "processing_failed"
+            )
+
+            failed_pages = [
+                page["page_number"]
+                for page in pages
+                if page.get("status") != "completed"
+            ]
+            if failed_pages:
+                result["failed_pages"] = failed_pages
+
+            if save_minio and self.use_minio and self.minio_client:
+                self._save_original_to_minio(pdf_path, doc_id, filename)
+
+        except Exception as e:
+            logger.error(f"Error processing PDF {doc_id}: {e}", exc_info=True)
+            result["status"] = "processing_failed"
+            result["error"] = str(e)
+            result["classification"] = result["classification"] or self._unknown_classification()
+            result["stamp_detection"] = result["stamp_detection"] or {"success": False, "error": str(e)}
+            import traceback
+            result["traceback"] = traceback.format_exc()
+        finally:
+            for page_image in page_images:
+                try:
+                    os.unlink(page_image.image_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {page_image.image_path}: {e}")
+
+        return result
+
+    def _merge_page_ocr(self, filename: str, pages: list) -> Dict[str, Any]:
+        page_ocr_results = [
+            page.get("ocr_result", {})
+            for page in pages
+            if page.get("ocr_result")
+        ]
+        merged_text = "\n\n".join(
+            page_ocr.get("text", "")
+            for page_ocr in page_ocr_results
+            if page_ocr.get("text")
+        ).strip()
+        merged_blocks = []
+
+        for page in pages:
+            page_number = page.get("page_number")
+            for block in page.get("ocr_result", {}).get("results", []):
+                block_with_page = dict(block)
+                block_with_page["page_number"] = page_number
+                merged_blocks.append(block_with_page)
+
+        return {
+            "document_name": filename,
+            "text": merged_text,
+            "total_blocks": len(merged_blocks),
+            "results": merged_blocks,
+            "pages": page_ocr_results,
+        }
+
+    def _best_page_classification(self, pages: list) -> Dict[str, Any]:
+        classifications = [
+            page.get("classification")
+            for page in pages
+            if page.get("classification")
+        ]
+        if not classifications:
+            return self._unknown_classification()
+
+        return max(
+            classifications,
+            key=lambda classification: classification.get("confidence", 0.0),
+        )
+
+    def _save_original_to_minio(self, file_path: str, doc_id: str, filename: str) -> None:
+        try:
+            object_key = f"{doc_id}/original/{filename}"
+            with open(file_path, "rb") as f:
+                original_data = f.read()
+
+            self.minio_client.put_object(
+                self.bucket_name,
+                object_key,
+                data=io.BytesIO(original_data),
+                length=len(original_data),
+                content_type=self._content_type_for_filename(filename),
+            )
+            logger.info(f"Saved original document to MinIO: {object_key}")
+        except Exception as e:
+            logger.warning(f"Failed to save original document to MinIO: {e}")
+
+    def _content_type_for_filename(self, filename: str) -> str:
+        extension = os.path.splitext(filename)[1].lower()
+        return {
+            ".pdf": "application/pdf",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".bmp": "image/bmp",
+            ".tif": "image/tiff",
+            ".tiff": "image/tiff",
+        }.get(extension, "application/octet-stream")
+
+    def _unknown_classification(self) -> Dict[str, Any]:
+        return {
+            "document_type": "unknown",
+            "display_name": "Unknown Document",
+            "confidence": 0.0,
+            "matched_keywords": [],
+            "extracted_fields": {},
+            "all_scores": {}
+        }
+
+    # ------------------------------------------------------------------
+    # Stamp detection helpers
+    # ------------------------------------------------------------------
+
+    def _serialize_stamp_result(self, stamp_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Strip non-serializable numpy arrays from stamp detection output."""
+        result = dict(stamp_result)
+        serializable_detections = []
+        for det in result.get("raw_detections", []):
+            det_copy = {k: v for k, v in det.items() if k != "crop"}
+            serializable_detections.append(det_copy)
+        result["raw_detections"] = serializable_detections
+
+        # Strip crops from analysis sub-lists too
+        analysis = result.get("analysis", {})
+        for key in ("valid_stamps", "invalid_stamps", "signatures"):
+            if key in analysis:
+                analysis[key] = [
+                    {k: v for k, v in d.items() if k != "crop"}
+                    for d in analysis[key]
+                ]
+
+        # Convert numpy image_shape tuple to list for JSON
+        if "image_shape" in result:
+            try:
+                result.pop("image_shape", None)
+            except Exception:
+                pass
+
+        return result
+
+    def _aggregate_stamp_detections(self, pages: list) -> Dict[str, Any]:
+        """Aggregate per-page stamp detection results into a document-level summary."""
+        all_stamps = []
+        all_signatures = []
+        all_qr_codes = []
+        is_estamp = False
+        best_estamp_score = 0
+        document_fields = {}
+
+        for page in pages:
+            sd = page.get("stamp_detection")
+            if not sd or not sd.get("success"):
+                continue
+
+            page_number = page.get("page_number")
+            bboxes = sd.get("bounding_boxes", {})
+
+            for s in bboxes.get("stamps", []):
+                s_copy = dict(s)
+                s_copy["page_number"] = page_number
+                all_stamps.append(s_copy)
+
+            for s in bboxes.get("signatures", []):
+                s_copy = dict(s)
+                s_copy["page_number"] = page_number
+                all_signatures.append(s_copy)
+
+            for q in bboxes.get("qr_codes", []):
+                q_copy = dict(q)
+                q_copy["page_number"] = page_number
+                all_qr_codes.append(q_copy)
+
+            if sd.get("is_estamp_document"):
+                is_estamp = True
+
+            page_fields = sd.get("document_fields", {})
+            page_score = page_fields.get("estamp_score", 0)
+            if page_score > best_estamp_score:
+                best_estamp_score = page_score
+                document_fields = page_fields
+
+        return {
+            "success": True,
+            "is_estamp_document": is_estamp,
+            "document_type": "e_stamp" if is_estamp else "non_e_stamp",
+            "document_fields": document_fields,
+            "physical_stamps_found": len(all_stamps),
+            "signatures_found": len(all_signatures),
+            "bounding_boxes": {
+                "stamps": all_stamps,
+                "signatures": all_signatures,
+                "qr_codes": all_qr_codes,
+            },
+        }
+
+    def _save_detection_visualization(
+        self,
+        image,
+        stamp_result: Dict[str, Any],
+        output_dir: str,
+        filename: str,
+        page_number: Optional[int] = None,
+    ) -> None:
+        """Draw bounding boxes on image and save annotated PNG to output_dir."""
+        try:
+            from app.stamp_detection.utils import StampDetectionUtils
+
+            detections = stamp_result.get("raw_detections", [])
+            if not detections:
+                return
+
+            annotated = StampDetectionUtils.draw_detections(image, detections)
+
+            base = os.path.splitext(filename)[0]
+            if page_number is not None:
+                viz_name = f"{base}_page{page_number}_detections.png"
+            else:
+                viz_name = f"{base}_detections.png"
+
+            os.makedirs(output_dir, exist_ok=True)
+            viz_path = os.path.join(output_dir, viz_name)
+            cv2.imwrite(viz_path, annotated)
+            logger.info(f"Saved detection visualization to {viz_path}")
+
+        except Exception as e:
+            logger.warning(f"Failed to save visualization: {e}")
 
     def process_from_bytes(
         self,

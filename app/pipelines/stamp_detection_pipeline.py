@@ -18,13 +18,14 @@ class StampDetectionPipeline:
     e-stamp AND contain physical rubber stamps and signatures.
     """
 
-    def __init__(self, model_path: str = "app/models/best.pt"):
+    def __init__(self, model_path: str = "app/models/best.pt", ocr_engine=None):
         """Initialize the stamp detection pipeline"""
-        self.detector = StampDetector(model_path=model_path)
+        self.detector = StampDetector(model_path=model_path, ocr_engine=ocr_engine)
         logger.info("✅ Stamp Detection Pipeline initialized")
 
-    def process(self, preprocessed_image: np.ndarray, 
-                image_path: Optional[str] = None) -> Dict:
+    def process(self, preprocessed_image: np.ndarray,
+                image_path: Optional[str] = None,
+                ocr_text: Optional[str] = None) -> Dict:
         """
         Process image through stamp detection pipeline
         
@@ -42,11 +43,18 @@ class StampDetectionPipeline:
             # Run detection
             detection_result = self.detector.detect(
                 preprocessed_image,
-                return_crops=True
+                return_crops=True,
+                ocr_text=ocr_text,
             )
             
             # Analyze results
             analysis = self._analyze_detections(detection_result)
+
+            # Build structured bounding boxes grouped by type
+            bounding_boxes = self._extract_bounding_boxes(
+                detection_result["detections"],
+                detection_result.get("document_fields", {}),
+            )
             
             # Create output
             output = {
@@ -56,6 +64,7 @@ class StampDetectionPipeline:
                 "document_fields": detection_result.get("document_fields", {}),
                 "physical_stamps_found": analysis["stamp_count"],
                 "signatures_found": analysis["signature_count"],
+                "bounding_boxes": bounding_boxes,
                 "raw_detections": detection_result["detections"],
                 "summary": detection_result["summary"],
                 "analysis": analysis,
@@ -109,6 +118,36 @@ class StampDetectionPipeline:
         analysis["overlap_analysis"] = overlap_result
 
         return analysis
+
+    def _extract_bounding_boxes(self, detections: list, document_fields: dict) -> Dict:
+        """Extract bounding boxes grouped by detection type."""
+        stamps = []
+        signatures = []
+
+        for det in detections:
+            entry = {
+                "bbox": det.get("bbox"),
+                "confidence": det.get("confidence"),
+                "ink_confirmed": det.get("ink_confirmed"),
+                "anomalies": det.get("anomalies", []),
+            }
+            if det.get("label") == "stamp":
+                stamps.append(entry)
+            elif det.get("label") == "signature":
+                signatures.append(entry)
+
+        qr_codes = []
+        if document_fields.get("qr_present"):
+            qr_codes.append({
+                "decoded": document_fields.get("qr_decoded", False),
+                "data": document_fields.get("qr_data"),
+            })
+
+        return {
+            "stamps": stamps,
+            "signatures": signatures,
+            "qr_codes": qr_codes,
+        }
 
     def process_with_visualization(self, preprocessed_image: np.ndarray,
                                   output_path: str) -> Dict:

@@ -56,7 +56,7 @@ DOCUMENT_RULES = [
         ],
         "field_patterns": {
             "aadhaar_number": re.compile(
-                r"(?<![/\-\.\d])(?P<value>\d{4}\s\d{4}\s\d{4}|\d{12})(?!\s?\d)"
+                r"(?<![/\-\.\d])(?P<value>[2-9]\d{3}\s\d{4}\s\d{4}|[2-9]\d{11})"
             ),
             "vid_number": re.compile(
                 r"\b(?:vid|VID)\s*:?\s*(?P<value>\d{4}\s?\d{4}\s?\d{4}\s?\d{4})\b"

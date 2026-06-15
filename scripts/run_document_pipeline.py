@@ -3,19 +3,22 @@
 Complete document intelligence pipeline runner.
 
 Usage:
-    python scripts/run_document_pipeline.py sample.webp
+    python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/estamp2_result.json
     python scripts/run_document_pipeline.py sample.webp --output output/result.json
     python scripts/run_document_pipeline.py sample.webp --output output/result.json --minio
 
 Pipeline:
-    Image → Preprocessing → OCR → Classification → JSON Output
+    Input (PDF/Image) → Preprocessing → OCR → Classification → Stamp Detection → JSON + Visualizations
 
 Features:
+    - Accepts PDF or image files as input
     - Full preprocessing (blur detection, sharpening)
     - OCR with parser and formatter
     - Document classification
+    - Stamp / signature / QR detection with bounding boxes
     - Optional MinIO integration
     - JSON output to console and file
+    - Bounding-box visualization images saved alongside JSON
 """
 
 import sys
@@ -37,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_pipeline(
-    image_path: str,
+    input_path: str,
     output_path: str = None,
     use_minio: bool = True,
     save_to_minio: bool = True
@@ -46,48 +49,54 @@ def run_pipeline(
     Run complete document pipeline.
 
     Args:
-        image_path: Path to input image.
+        input_path: Path to input image or PDF file.
         output_path: Optional path to save JSON output.
         use_minio: If True, initialize MinIO integration (default: True).
         save_to_minio: If True, save intermediate results to MinIO (default: True).
 
     Returns:
-        Processing result dict with status, OCR, classification, etc.
+        Processing result dict with status, OCR, classification, stamp detection, etc.
     """
-    image_path = Path(image_path)
+    input_path = Path(input_path)
 
-    if not image_path.exists():
-        logger.error(f"Image not found: {image_path}")
+    if not input_path.exists():
+        logger.error(f"Input file not found: {input_path}")
         return {
             "status": "error",
-            "error": f"Image not found: {image_path}",
-            "filename": str(image_path)
+            "error": f"Input file not found: {input_path}",
+            "filename": str(input_path)
         }
 
-    logger.info(f"Starting pipeline for {image_path}")
+    # Derive output directory from output path for saving visualizations
+    output_dir = None
+    if output_path:
+        output_dir = str(Path(output_path).parent)
+
+    logger.info(f"Starting pipeline for {input_path}")
 
     try:
         processor = DocumentProcessor(use_minio=use_minio)
 
         # Process document
         result = processor.process_document(
-            str(image_path),
-            save_minio=save_to_minio and use_minio
+            str(input_path),
+            save_minio=save_to_minio and use_minio,
+            output_dir=output_dir,
         )
 
         # Print to console
         print("\n" + "=" * 80)
         print("DOCUMENT PROCESSING RESULT")
         print("=" * 80)
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result, indent=2, default=str))
         print("=" * 80 + "\n")
 
-        # Optionally save to file
+        # Save to file
         if output_path:
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
             with open(output_file, 'w') as f:
-                json.dump(result, f, indent=2)
+                json.dump(result, f, indent=2, default=str)
             logger.info(f"Saved result to {output_file}")
 
         return result
@@ -96,7 +105,7 @@ def run_pipeline(
         logger.error(f"Pipeline processing failed: {e}", exc_info=True)
         result = {
             "status": "error",
-            "filename": str(image_path),
+            "filename": str(input_path),
             "error": str(e),
         }
         print(json.dumps(result, indent=2))
@@ -109,18 +118,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/run_document_pipeline.py sample.webp
-  python scripts/run_document_pipeline.py sample.webp --output output/result.json
-  python scripts/run_document_pipeline.py sample.webp --output output/result.json --no-minio
+  python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/estamp2_result.json
+  python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json
+  python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json --no-minio
         """
     )
     parser.add_argument(
-        "image",
-        help="Path to input image file"
+        "input",
+        help="Path to input document file (PDF or image)"
     )
     parser.add_argument(
         "-o", "--output",
-        help="Output JSON file (optional, default: console only)",
+        help="Output JSON file path. Bounding-box visualizations are saved in the same directory.",
         default=None
     )
     parser.add_argument(
@@ -133,13 +142,13 @@ Examples:
     args = parser.parse_args()
 
     result = run_pipeline(
-        args.image,
+        args.input,
         args.output,
         use_minio=not args.no_minio,
         save_to_minio=not args.no_minio
     )
 
-    return 0 if result["status"] == "completed" else 1
+    return 0 if result.get("status") == "completed" else 1
 
 
 if __name__ == "__main__":

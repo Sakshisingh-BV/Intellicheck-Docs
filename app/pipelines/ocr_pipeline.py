@@ -11,7 +11,7 @@ class OCRPipeline:
     def __init__(self):
         self.engine = OCREngine()
 
-    def run(self, image_path, check_quality=True):
+    def run(self, image_input, check_quality=True, image_name=None):
         """
         OCR pipeline: optional quality check → PaddleOCR → parse → format.
 
@@ -19,10 +19,14 @@ class OCRPipeline:
         image enhancement internally. No custom preprocessing needed.
 
         Args:
-            image_path: Path to the input image file.
+            image_input: Path to an image file (str) or a numpy array
+                         (BGR/grayscale).
             check_quality: If True, run blur detection as a quality
                            gate (without modifying the image).
                            Defaults to True.
+            image_name: Display name for the document in formatted output.
+                        Defaults to the file path when a path is given,
+                        or "image" when a numpy array is given.
 
         Returns:
             Tuple of (parsed_result, formatted_result, quality_info).
@@ -33,8 +37,11 @@ class OCRPipeline:
         quality_info = None
 
         if check_quality:
-            image = load_image(image_path)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            if isinstance(image_input, str):
+                image = load_image(image_input)
+            else:
+                image = image_input
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
             blur_result = detect_blur(gray)
             quality_info = {
                 "blur_score": blur_result["blur_score"],
@@ -42,14 +49,15 @@ class OCRPipeline:
                 "blur_level": blur_result["blur_level"],
             }
 
-        # Feed raw image directly to PaddleOCR 3.5
-        raw_result = self.engine.extract(image_path)
+        # Feed image directly to PaddleOCR 3.5
+        raw_result = self.engine.extract(image_input)
 
         parsed_result = OCRParser.parse(raw_result)
 
+        display_name = image_name or (image_input if isinstance(image_input, str) else "image")
         formatted_result = OCRFormatter.format(
             parsed_result,
-            image_path
+            display_name
         )
 
         return parsed_result, formatted_result, quality_info

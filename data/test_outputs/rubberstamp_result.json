@@ -1,0 +1,1466 @@
+{
+  "doc_id": "0f652ff3-bbe6-4a45-8d93-12f55873cf3e",
+  "filename": "rubberstamp.png",
+  "file_type": "image",
+  "status": "completed",
+  "classification": {
+    "document_type": "unknown",
+    "display_name": "Unknown Document",
+    "confidence": 0.0,
+    "matched_keywords": [],
+    "extracted_fields": {},
+    "all_scores": {
+      "aadhaar_card": 0.0,
+      "pan_card": 0.0,
+      "passport": 0.0789,
+      "utility_bill": 0.0,
+      "bank_statement": 0.0
+    }
+  },
+  "stamp_detection": {
+    "success": true,
+    "document_type": "non_e_stamp",
+    "is_estamp_document": false,
+    "document_fields": {
+      "certificate_number": null,
+      "stamp_duty": null,
+      "state": null,
+      "date": null,
+      "qr_present": true,
+      "qr_decoded": false,
+      "qr_data": null,
+      "qr_certificate_match": null,
+      "qr_certificate_number": null,
+      "estamp_score": 2,
+      "estamp_threshold": 50,
+      "scoring_breakdown": {
+        "certificate_number": {
+          "found": false,
+          "points": 0
+        },
+        "state": {
+          "found": false,
+          "value": null,
+          "points": 0,
+          "reason": "not found"
+        },
+        "stamp_duty": {
+          "found": false,
+          "value": null,
+          "points": 0,
+          "reason": "not found"
+        },
+        "date": {
+          "found": true,
+          "value": "4 MAR 2016",
+          "points": 0,
+          "reason": "requires e-stamp context"
+        },
+        "qr_present": {
+          "found": true,
+          "points": 2
+        },
+        "qr_decoded": {
+          "found": false,
+          "points": 0
+        }
+      },
+      "blur_score": null,
+      "blur_level": "unknown",
+      "ocr_retried": false
+    },
+    "physical_stamps_found": 0,
+    "signatures_found": 0,
+    "bounding_boxes": {
+      "stamps": [],
+      "signatures": [],
+      "qr_codes": [
+        {
+          "decoded": false,
+          "data": null
+        }
+      ]
+    },
+    "raw_detections": [
+      {
+        "label": "unknown",
+        "confidence": 0.912,
+        "bbox": [
+          237.09,
+          28.85,
+          413.34,
+          209.04
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      },
+      {
+        "label": "unknown",
+        "confidence": 0.911,
+        "bbox": [
+          434.46,
+          39.33,
+          613.86,
+          218.0
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      },
+      {
+        "label": "unknown",
+        "confidence": 0.911,
+        "bbox": [
+          405.69,
+          526.6,
+          615.66,
+          700.0
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      },
+      {
+        "label": "unknown",
+        "confidence": 0.907,
+        "bbox": [
+          186.53,
+          579.27,
+          361.06,
+          700.0
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      },
+      {
+        "label": "unknown",
+        "confidence": 0.844,
+        "bbox": [
+          47.55,
+          235.92,
+          233.73,
+          331.81
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      },
+      {
+        "label": "unknown",
+        "confidence": 0.702,
+        "bbox": [
+          49.79,
+          667.84,
+          157.35,
+          700.0
+        ],
+        "ink_confirmed": true,
+        "anomalies": []
+      }
+    ],
+    "summary": {
+      "total_detections": 6,
+      "physical_stamps": 0,
+      "signatures": 0,
+      "detections_with_anomalies": 0,
+      "overall_confidence": 0.864
+    },
+    "analysis": {
+      "valid_stamps": [],
+      "invalid_stamps": [],
+      "signatures": [],
+      "stamp_count": 0,
+      "signature_count": 0,
+      "overlap_analysis": {
+        "overlapping_pairs": [],
+        "has_suspicious_overlap": false
+      }
+    },
+    "image_path": "data\\rubberstamp.png"
+  },
+  "quality": {
+    "blur_score": 1956.03,
+    "is_blurry": false,
+    "blur_level": "sharp"
+  },
+  "ocr_result": {
+    "document_name": "rubberstamp.png",
+    "text": "NOTAR\nT. Shabare\nGr. Mumbai\nNaay: T. T. Shotare\nNa: 660/93\nArew Cr. Mundai\nR.\nNOTARIAL\nOTARIA\nNOYARTA660.93\nOF MAH\nOF\nATTESTER BY MB\n15/086\n. Y.SHANABE\nQOEARY, GBEATSS MYES\n4 MAR 2016\nthe product has been reformulated with a view to improving its stability under tropical conditions:\n(c)\nthe product has been reformulated to exclude excipients not approved for use in pharmaceutical products\nin the country of import:\n(d)\nthe product has been reformulated to meet a different maximum dosage limit for an active ingredient\nany other reason, please specify.\n4.\nNot applicable means that the manufacture is taking place in a country other than that issuing the product\ncertificate and Inspection is conducted under the aegis of the country of manufacture.\nThe requirements for good practices in the manufacture and quality control of drugs referred to the certificate\nare those included in the thirty- second report of the Expert Committee on specifications for Pharmaceutical\nPreparatiovyO Technical Report Series, No.823, 1992, Annex eRecommendations specifically\napplicable to  lia products have been formulated by the Wi B Gd,pirtee on Biological\nabove documen\n16\n)\n4\ndescribed in note 8 above\nof particular importance\nanufacture of the pe g.in these \nh\u00e9n foreign contractors are \ned in the\ncoumstances the applicapt should supaiyshe certifying \n(oT Finforfmafion to rdenofy the contracting Ne\nrity with\n refu ind tre adature of any o\nresponsible for\ncth stage of marlifseture of the finishe\ndosage\nexercised overcarh of these pari\nThe\nmature of Asstt. Secretary\nDy\noiary/Secredporddiow\ndiskette in Wora\ndect from the Drvlon of Drug\nSwitzerland\nTal\nement and\nof",
+    "total_blocks": 58,
+    "results": [
+      {
+        "text": "NOTAR",
+        "confidence": 0.9949957132339478,
+        "bbox": {
+          "top_left": [
+            485,
+            56
+          ],
+          "top_right": [
+            543,
+            49
+          ],
+          "bottom_right": [
+            545,
+            66
+          ],
+          "bottom_left": [
+            487,
+            73
+          ]
+        }
+      },
+      {
+        "text": "T. Shabare",
+        "confidence": 0.9648874998092651,
+        "bbox": {
+          "top_left": [
+            314,
+            93
+          ],
+          "top_right": [
+            368,
+            82
+          ],
+          "bottom_right": [
+            371,
+            98
+          ],
+          "bottom_left": [
+            317,
+            109
+          ]
+        }
+      },
+      {
+        "text": "Gr. Mumbai",
+        "confidence": 0.9364460110664368,
+        "bbox": {
+          "top_left": [
+            301,
+            112
+          ],
+          "top_right": [
+            366,
+            97
+          ],
+          "bottom_right": [
+            370,
+            113
+          ],
+          "bottom_left": [
+            304,
+            128
+          ]
+        }
+      },
+      {
+        "text": "Naay: T. T. Shotare",
+        "confidence": 0.8443179130554199,
+        "bbox": {
+          "top_left": [
+            470,
+            109
+          ],
+          "top_right": [
+            570,
+            97
+          ],
+          "bottom_right": [
+            572,
+            112
+          ],
+          "bottom_left": [
+            472,
+            124
+          ]
+        }
+      },
+      {
+        "text": "Na: 660/93",
+        "confidence": 0.9532046318054199,
+        "bbox": {
+          "top_left": [
+            299,
+            126
+          ],
+          "top_right": [
+            369,
+            110
+          ],
+          "bottom_right": [
+            373,
+            130
+          ],
+          "bottom_left": [
+            303,
+            145
+          ]
+        }
+      },
+      {
+        "text": "Arew Cr. Mundai",
+        "confidence": 0.7826465964317322,
+        "bbox": {
+          "top_left": [
+            475,
+            122
+          ],
+          "top_right": [
+            568,
+            110
+          ],
+          "bottom_right": [
+            570,
+            126
+          ],
+          "bottom_left": [
+            477,
+            138
+          ]
+        }
+      },
+      {
+        "text": "R.",
+        "confidence": 0.7616873979568481,
+        "bbox": {
+          "top_left": [
+            282,
+            134
+          ],
+          "top_right": [
+            304,
+            131
+          ],
+          "bottom_right": [
+            307,
+            144
+          ],
+          "bottom_left": [
+            285,
+            148
+          ]
+        }
+      },
+      {
+        "text": "NOTARIAL",
+        "confidence": 0.9997862577438354,
+        "bbox": {
+          "top_left": [
+            305,
+            141
+          ],
+          "top_right": [
+            366,
+            138
+          ],
+          "bottom_right": [
+            366,
+            154
+          ],
+          "bottom_left": [
+            306,
+            157
+          ]
+        }
+      },
+      {
+        "text": "OTARIA",
+        "confidence": 0.9988865852355957,
+        "bbox": {
+          "top_left": [
+            403,
+            142
+          ],
+          "top_right": [
+            446,
+            142
+          ],
+          "bottom_right": [
+            446,
+            154
+          ],
+          "bottom_left": [
+            403,
+            154
+          ]
+        }
+      },
+      {
+        "text": "NOYARTA660.93",
+        "confidence": 0.7673402428627014,
+        "bbox": {
+          "top_left": [
+            473,
+            138
+          ],
+          "top_right": [
+            570,
+            122
+          ],
+          "bottom_right": [
+            574,
+            146
+          ],
+          "bottom_left": [
+            477,
+            162
+          ]
+        }
+      },
+      {
+        "text": "OF MAH",
+        "confidence": 0.8977901935577393,
+        "bbox": {
+          "top_left": [
+            299,
+            175
+          ],
+          "top_right": [
+            355,
+            172
+          ],
+          "bottom_right": [
+            356,
+            190
+          ],
+          "bottom_left": [
+            299,
+            193
+          ]
+        }
+      },
+      {
+        "text": "OF",
+        "confidence": 0.9731383323669434,
+        "bbox": {
+          "top_left": [
+            490,
+            175
+          ],
+          "top_right": [
+            513,
+            179
+          ],
+          "bottom_right": [
+            510,
+            199
+          ],
+          "bottom_left": [
+            487,
+            195
+          ]
+        }
+      },
+      {
+        "text": "ATTESTER BY MB",
+        "confidence": 0.9178681969642639,
+        "bbox": {
+          "top_left": [
+            54,
+            240
+          ],
+          "top_right": [
+            214,
+            233
+          ],
+          "bottom_right": [
+            215,
+            258
+          ],
+          "bottom_left": [
+            55,
+            264
+          ]
+        }
+      },
+      {
+        "text": "15/086",
+        "confidence": 0.6418195962905884,
+        "bbox": {
+          "top_left": [
+            151,
+            260
+          ],
+          "top_right": [
+            241,
+            260
+          ],
+          "bottom_right": [
+            241,
+            294
+          ],
+          "bottom_left": [
+            151,
+            294
+          ]
+        }
+      },
+      {
+        "text": ". Y.SHANABE",
+        "confidence": 0.8463841080665588,
+        "bbox": {
+          "top_left": [
+            72,
+            290
+          ],
+          "top_right": [
+            199,
+            285
+          ],
+          "bottom_right": [
+            200,
+            305
+          ],
+          "bottom_left": [
+            72,
+            310
+          ]
+        }
+      },
+      {
+        "text": "QOEARY, GBEATSS MYES",
+        "confidence": 0.6760669946670532,
+        "bbox": {
+          "top_left": [
+            47,
+            311
+          ],
+          "top_right": [
+            219,
+            305
+          ],
+          "bottom_right": [
+            219,
+            321
+          ],
+          "bottom_left": [
+            47,
+            327
+          ]
+        }
+      },
+      {
+        "text": "4 MAR 2016",
+        "confidence": 0.9645543098449707,
+        "bbox": {
+          "top_left": [
+            80,
+            360
+          ],
+          "top_right": [
+            206,
+            339
+          ],
+          "bottom_right": [
+            211,
+            372
+          ],
+          "bottom_left": [
+            85,
+            392
+          ]
+        }
+      },
+      {
+        "text": "the product has been reformulated with a view to improving its stability under tropical conditions:",
+        "confidence": 0.9626128077507019,
+        "bbox": {
+          "top_left": [
+            121,
+            402
+          ],
+          "top_right": [
+            613,
+            406
+          ],
+          "bottom_right": [
+            612,
+            426
+          ],
+          "bottom_left": [
+            121,
+            421
+          ]
+        }
+      },
+      {
+        "text": "(c)",
+        "confidence": 0.995204746723175,
+        "bbox": {
+          "top_left": [
+            123,
+            419
+          ],
+          "top_right": [
+            143,
+            419
+          ],
+          "bottom_right": [
+            143,
+            433
+          ],
+          "bottom_left": [
+            123,
+            433
+          ]
+        }
+      },
+      {
+        "text": "the product has been reformulated to exclude excipients not approved for use in pharmaceutical products",
+        "confidence": 0.9888947010040283,
+        "bbox": {
+          "top_left": [
+            140,
+            417
+          ],
+          "top_right": [
+            651,
+            423
+          ],
+          "bottom_right": [
+            651,
+            439
+          ],
+          "bottom_left": [
+            140,
+            433
+          ]
+        }
+      },
+      {
+        "text": "in the country of import:",
+        "confidence": 0.9886845350265503,
+        "bbox": {
+          "top_left": [
+            144,
+            431
+          ],
+          "top_right": [
+            264,
+            432
+          ],
+          "bottom_right": [
+            263,
+            448
+          ],
+          "bottom_left": [
+            144,
+            447
+          ]
+        }
+      },
+      {
+        "text": "(d)",
+        "confidence": 0.896486759185791,
+        "bbox": {
+          "top_left": [
+            122,
+            446
+          ],
+          "top_right": [
+            143,
+            446
+          ],
+          "bottom_right": [
+            143,
+            458
+          ],
+          "bottom_left": [
+            122,
+            458
+          ]
+        }
+      },
+      {
+        "text": "the product has been reformulated to meet a different maximum dosage limit for an active ingredient",
+        "confidence": 0.9881801605224609,
+        "bbox": {
+          "top_left": [
+            140,
+            443
+          ],
+          "top_right": [
+            623,
+            449
+          ],
+          "bottom_right": [
+            623,
+            465
+          ],
+          "bottom_left": [
+            140,
+            459
+          ]
+        }
+      },
+      {
+        "text": "any other reason, please specify.",
+        "confidence": 0.9848893880844116,
+        "bbox": {
+          "top_left": [
+            120,
+            457
+          ],
+          "top_right": [
+            299,
+            458
+          ],
+          "bottom_right": [
+            299,
+            474
+          ],
+          "bottom_left": [
+            120,
+            473
+          ]
+        }
+      },
+      {
+        "text": "4.",
+        "confidence": 0.9852046370506287,
+        "bbox": {
+          "top_left": [
+            110,
+            475
+          ],
+          "top_right": [
+            120,
+            475
+          ],
+          "bottom_right": [
+            120,
+            482
+          ],
+          "bottom_left": [
+            110,
+            482
+          ]
+        }
+      },
+      {
+        "text": "Not applicable means that the manufacture is taking place in a country other than that issuing the product",
+        "confidence": 0.989464282989502,
+        "bbox": {
+          "top_left": [
+            119,
+            470
+          ],
+          "top_right": [
+            651,
+            476
+          ],
+          "bottom_right": [
+            651,
+            492
+          ],
+          "bottom_left": [
+            119,
+            486
+          ]
+        }
+      },
+      {
+        "text": "certificate and Inspection is conducted under the aegis of the country of manufacture.",
+        "confidence": 0.9830009341239929,
+        "bbox": {
+          "top_left": [
+            122,
+            483
+          ],
+          "top_right": [
+            527,
+            488
+          ],
+          "bottom_right": [
+            527,
+            503
+          ],
+          "bottom_left": [
+            122,
+            498
+          ]
+        }
+      },
+      {
+        "text": "The requirements for good practices in the manufacture and quality control of drugs referred to the certificate",
+        "confidence": 0.9799298048019409,
+        "bbox": {
+          "top_left": [
+            118,
+            496
+          ],
+          "top_right": [
+            650,
+            502
+          ],
+          "bottom_right": [
+            650,
+            518
+          ],
+          "bottom_left": [
+            117,
+            512
+          ]
+        }
+      },
+      {
+        "text": "are those included in the thirty- second report of the Expert Committee on specifications for Pharmaceutical",
+        "confidence": 0.9838460087776184,
+        "bbox": {
+          "top_left": [
+            121,
+            510
+          ],
+          "top_right": [
+            650,
+            516
+          ],
+          "bottom_right": [
+            650,
+            531
+          ],
+          "bottom_left": [
+            121,
+            525
+          ]
+        }
+      },
+      {
+        "text": "PreparatiovyO Technical Report Series, No.823, 1992, Annex eRecommendations specifically",
+        "confidence": 0.9046329259872437,
+        "bbox": {
+          "top_left": [
+            120,
+            521
+          ],
+          "top_right": [
+            650,
+            526
+          ],
+          "bottom_right": [
+            650,
+            546
+          ],
+          "bottom_left": [
+            120,
+            541
+          ]
+        }
+      },
+      {
+        "text": "applicable to  lia products have been formulated by the Wi B Gd,pirtee on Biological",
+        "confidence": 0.8861767053604126,
+        "bbox": {
+          "top_left": [
+            120,
+            534
+          ],
+          "top_right": [
+            650,
+            540
+          ],
+          "bottom_right": [
+            650,
+            560
+          ],
+          "bottom_left": [
+            120,
+            554
+          ]
+        }
+      },
+      {
+        "text": "above documen",
+        "confidence": 0.9979146122932434,
+        "bbox": {
+          "top_left": [
+            69,
+            569
+          ],
+          "top_right": [
+            117,
+            503
+          ],
+          "bottom_right": [
+            128,
+            511
+          ],
+          "bottom_left": [
+            80,
+            577
+          ]
+        }
+      },
+      {
+        "text": "16",
+        "confidence": 0.9995514154434204,
+        "bbox": {
+          "top_left": [
+            105,
+            568
+          ],
+          "top_right": [
+            117,
+            568
+          ],
+          "bottom_right": [
+            117,
+            577
+          ],
+          "bottom_left": [
+            105,
+            577
+          ]
+        }
+      },
+      {
+        "text": ")",
+        "confidence": 0.6068483591079712,
+        "bbox": {
+          "top_left": [
+            100,
+            580
+          ],
+          "top_right": [
+            111,
+            580
+          ],
+          "bottom_right": [
+            111,
+            589
+          ],
+          "bottom_left": [
+            100,
+            589
+          ]
+        }
+      },
+      {
+        "text": "4",
+        "confidence": 0.7640612125396729,
+        "bbox": {
+          "top_left": [
+            110,
+            580
+          ],
+          "top_right": [
+            120,
+            580
+          ],
+          "bottom_right": [
+            120,
+            591
+          ],
+          "bottom_left": [
+            110,
+            591
+          ]
+        }
+      },
+      {
+        "text": "described in note 8 above",
+        "confidence": 0.9707709550857544,
+        "bbox": {
+          "top_left": [
+            119,
+            577
+          ],
+          "top_right": [
+            265,
+            579
+          ],
+          "bottom_right": [
+            264,
+            594
+          ],
+          "bottom_left": [
+            119,
+            592
+          ]
+        }
+      },
+      {
+        "text": "of particular importance",
+        "confidence": 0.9870057106018066,
+        "bbox": {
+          "top_left": [
+            268,
+            578
+          ],
+          "top_right": [
+            413,
+            580
+          ],
+          "bottom_right": [
+            413,
+            595
+          ],
+          "bottom_left": [
+            268,
+            593
+          ]
+        }
+      },
+      {
+        "text": "anufacture of the pe g.in these ",
+        "confidence": 0.7328592538833618,
+        "bbox": {
+          "top_left": [
+            133,
+            589
+          ],
+          "top_right": [
+            321,
+            593
+          ],
+          "bottom_right": [
+            320,
+            609
+          ],
+          "bottom_left": [
+            132,
+            606
+          ]
+        }
+      },
+      {
+        "text": "h\u00e9n foreign contractors are ",
+        "confidence": 0.9219747185707092,
+        "bbox": {
+          "top_left": [
+            428,
+            580
+          ],
+          "top_right": [
+            592,
+            583
+          ],
+          "bottom_right": [
+            592,
+            598
+          ],
+          "bottom_left": [
+            428,
+            595
+          ]
+        }
+      },
+      {
+        "text": "ed in the",
+        "confidence": 0.9969781041145325,
+        "bbox": {
+          "top_left": [
+            597,
+            581
+          ],
+          "top_right": [
+            650,
+            584
+          ],
+          "bottom_right": [
+            650,
+            600
+          ],
+          "bottom_left": [
+            596,
+            597
+          ]
+        }
+      },
+      {
+        "text": "coumstances the applicapt should supaiyshe certifying ",
+        "confidence": 0.9063659906387329,
+        "bbox": {
+          "top_left": [
+            313,
+            592
+          ],
+          "top_right": [
+            597,
+            595
+          ],
+          "bottom_right": [
+            596,
+            611
+          ],
+          "bottom_left": [
+            312,
+            608
+          ]
+        }
+      },
+      {
+        "text": "(oT Finforfmafion to rdenofy the contracting Ne",
+        "confidence": 0.760486364364624,
+        "bbox": {
+          "top_left": [
+            89,
+            602
+          ],
+          "top_right": [
+            323,
+            608
+          ],
+          "bottom_right": [
+            323,
+            623
+          ],
+          "bottom_left": [
+            89,
+            617
+          ]
+        }
+      },
+      {
+        "text": "rity with",
+        "confidence": 0.9987557530403137,
+        "bbox": {
+          "top_left": [
+            603,
+            595
+          ],
+          "top_right": [
+            650,
+            598
+          ],
+          "bottom_right": [
+            650,
+            614
+          ],
+          "bottom_left": [
+            602,
+            611
+          ]
+        }
+      },
+      {
+        "text": " refu ind tre adature of any o",
+        "confidence": 0.611248254776001,
+        "bbox": {
+          "top_left": [
+            58,
+            616
+          ],
+          "top_right": [
+            338,
+            617
+          ],
+          "bottom_right": [
+            338,
+            637
+          ],
+          "bottom_left": [
+            58,
+            636
+          ]
+        }
+      },
+      {
+        "text": "responsible for",
+        "confidence": 0.9996640086174011,
+        "bbox": {
+          "top_left": [
+            339,
+            609
+          ],
+          "top_right": [
+            415,
+            609
+          ],
+          "bottom_right": [
+            415,
+            622
+          ],
+          "bottom_left": [
+            339,
+            622
+          ]
+        }
+      },
+      {
+        "text": "cth stage of marlifseture of the finishe",
+        "confidence": 0.8538791537284851,
+        "bbox": {
+          "top_left": [
+            414,
+            607
+          ],
+          "top_right": [
+            602,
+            608
+          ],
+          "bottom_right": [
+            602,
+            624
+          ],
+          "bottom_left": [
+            414,
+            623
+          ]
+        }
+      },
+      {
+        "text": "dosage",
+        "confidence": 0.9991268515586853,
+        "bbox": {
+          "top_left": [
+            612,
+            607
+          ],
+          "top_right": [
+            651,
+            612
+          ],
+          "bottom_right": [
+            649,
+            629
+          ],
+          "bottom_left": [
+            610,
+            625
+          ]
+        }
+      },
+      {
+        "text": "exercised overcarh of these pari",
+        "confidence": 0.9381660223007202,
+        "bbox": {
+          "top_left": [
+            339,
+            619
+          ],
+          "top_right": [
+            523,
+            623
+          ],
+          "bottom_right": [
+            522,
+            638
+          ],
+          "bottom_left": [
+            339,
+            634
+          ]
+        }
+      },
+      {
+        "text": "The",
+        "confidence": 0.9990193843841553,
+        "bbox": {
+          "top_left": [
+            15,
+            638
+          ],
+          "top_right": [
+            34,
+            638
+          ],
+          "bottom_right": [
+            34,
+            647
+          ],
+          "bottom_left": [
+            15,
+            647
+          ]
+        }
+      },
+      {
+        "text": "mature of Asstt. Secretary",
+        "confidence": 0.9562643766403198,
+        "bbox": {
+          "top_left": [
+            56,
+            633
+          ],
+          "top_right": [
+            228,
+            632
+          ],
+          "bottom_right": [
+            228,
+            648
+          ],
+          "bottom_left": [
+            56,
+            649
+          ]
+        }
+      },
+      {
+        "text": "Dy",
+        "confidence": 0.9982448816299438,
+        "bbox": {
+          "top_left": [
+            13,
+            650
+          ],
+          "top_right": [
+            30,
+            650
+          ],
+          "bottom_right": [
+            30,
+            665
+          ],
+          "bottom_left": [
+            13,
+            665
+          ]
+        }
+      },
+      {
+        "text": "oiary/Secredporddiow",
+        "confidence": 0.7210248112678528,
+        "bbox": {
+          "top_left": [
+            59,
+            650
+          ],
+          "top_right": [
+            215,
+            643
+          ],
+          "bottom_right": [
+            216,
+            658
+          ],
+          "bottom_left": [
+            60,
+            665
+          ]
+        }
+      },
+      {
+        "text": "diskette in Wora",
+        "confidence": 0.9701970815658569,
+        "bbox": {
+          "top_left": [
+            352,
+            647
+          ],
+          "top_right": [
+            421,
+            647
+          ],
+          "bottom_right": [
+            421,
+            660
+          ],
+          "bottom_left": [
+            352,
+            660
+          ]
+        }
+      },
+      {
+        "text": "dect from the Drvlon of Drug",
+        "confidence": 0.9255751967430115,
+        "bbox": {
+          "top_left": [
+            436,
+            646
+          ],
+          "top_right": [
+            575,
+            648
+          ],
+          "bottom_right": [
+            575,
+            664
+          ],
+          "bottom_left": [
+            436,
+            662
+          ]
+        }
+      },
+      {
+        "text": "Switzerland",
+        "confidence": 0.9846981167793274,
+        "bbox": {
+          "top_left": [
+            355,
+            659
+          ],
+          "top_right": [
+            409,
+            659
+          ],
+          "bottom_right": [
+            409,
+            671
+          ],
+          "bottom_left": [
+            355,
+            671
+          ]
+        }
+      },
+      {
+        "text": "Tal",
+        "confidence": 0.5603837370872498,
+        "bbox": {
+          "top_left": [
+            574,
+            654
+          ],
+          "top_right": [
+            591,
+            654
+          ],
+          "bottom_right": [
+            591,
+            662
+          ],
+          "bottom_left": [
+            574,
+            662
+          ]
+        }
+      },
+      {
+        "text": "ement and",
+        "confidence": 0.9977326989173889,
+        "bbox": {
+          "top_left": [
+            601,
+            650
+          ],
+          "top_right": [
+            648,
+            650
+          ],
+          "bottom_right": [
+            648,
+            662
+          ],
+          "bottom_left": [
+            601,
+            662
+          ]
+        }
+      },
+      {
+        "text": "of",
+        "confidence": 0.992095947265625,
+        "bbox": {
+          "top_left": [
+            15,
+            668
+          ],
+          "top_right": [
+            32,
+            668
+          ],
+          "bottom_right": [
+            32,
+            677
+          ],
+          "bottom_left": [
+            15,
+            677
+          ]
+        }
+      }
+    ]
+  }
+}
