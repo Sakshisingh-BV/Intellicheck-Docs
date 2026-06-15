@@ -245,3 +245,7 @@ class QRProcessor:
         except Exception as e:
             logger.debug(f"Barcode presence detection error: {e}")
             return False
+
+        except Exception as e:
+            logger.debug(f"Barcode presence detection error: {e}")
+            return None

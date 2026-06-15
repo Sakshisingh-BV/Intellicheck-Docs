@@ -3,5 +3,13 @@
 from .detector import StampDetector
 from .utils import StampDetectionUtils
 from .qr_processor import QRProcessor
+from .estamp_classifier import EStampClassifier
+from .anomaly_detector import AnomalyDetector
 
-__all__ = ["StampDetector", "StampDetectionUtils", "QRProcessor"]
+__all__ = [
+    "StampDetector",
+    "StampDetectionUtils",
+    "QRProcessor",
+    "EStampClassifier",
+    "AnomalyDetector",
+]
