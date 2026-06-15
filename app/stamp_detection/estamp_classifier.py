@@ -109,9 +109,15 @@ class EStampClassifier:
     # Public API
     # ------------------------------------------------------------------
 
-    def classify(self, image: np.ndarray) -> Dict:
+    def classify(self, image: np.ndarray, ocr_text: Optional[str] = None) -> Dict:
         """
         Classify whether an image is an e-stamp document.
+
+        Args:
+            image: Document image (BGR numpy array)
+            ocr_text: Optional pre-extracted OCR text. If provided, skips
+                      running OCR again (avoids redundant processing when
+                      the pipeline has already done OCR).
 
         Returns:
             {
@@ -137,8 +143,18 @@ class EStampClassifier:
             }
         """
         try:
-            # Step 1: Full-page OCR with blur-aware retry
-            full_text, blur_info = self._run_full_page_ocr(image)
+            # Step 1: Full-page OCR with blur-aware retry (or reuse provided text)
+            if ocr_text is not None:
+                full_text = ocr_text
+                blur_info = {
+                    "blur_score": None,
+                    "blur_level": "unknown",
+                    "is_blurry": False,
+                    "ocr_retried": False,
+                }
+            else:
+                full_text, blur_info = self._run_full_page_ocr(image)
+
 
             # Step 2: QR detection + decoding
             has_estamp_indicators = (

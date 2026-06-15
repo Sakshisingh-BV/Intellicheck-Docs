@@ -1,0 +1,16 @@
+settings_version: 0.0.4
+datasets_dir: C:\Users\saksh\Downloads\datasets
+weights_dir: C:\Users\saksh\Downloads\Intellicheck-Docs-sakshi-minio-update\weights
+runs_dir: C:\Users\saksh\Downloads\Intellicheck-Docs-sakshi-minio-update\runs
+uuid: 0aad14ec95d92c1776eb0c9982d47e48a320570e8fa5d326b37cd677b1e83f33
+sync: true
+api_key: ''
+clearml: true
+comet: true
+dvc: true
+hub: true
+mlflow: true
+neptune: true
+raytune: true
+tensorboard: true
+wandb: true

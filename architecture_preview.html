@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intellicheck - System Architecture</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Mermaid.js for Diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Outfit', sans-serif;
+        }
+        code, pre {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        
+        /* Markdown rendering styles */
+        .prose h1 {
+            color: #f3f4f6;
+            font-size: 2.25rem;
+            font-weight: 700;
+            border-bottom: 1px solid #1f2937;
+            padding-bottom: 0.5rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        .prose h2 {
+            color: #f3f4f6;
+            font-size: 1.5rem;
+            font-weight: 600;
+            border-bottom: 1px solid #1f2937;
+            padding-bottom: 0.25rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        .prose h3 {
+            color: #e5e7eb;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose p {
+            margin-bottom: 1rem;
+            line-height: 1.75;
+            color: #9ca3af;
+        }
+        .prose ul, .prose ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+            list-style-type: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .prose ul {
+            list-style-type: disc;
+        }
+        .prose li {
+            margin-bottom: 0.25rem;
+            color: #9ca3af;
+        }
+        .prose table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background-color: #0f172a;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            border: 1px solid #1e293b;
+        }
+        .prose th {
+            background-color: #1e293b;
+            color: #f3f4f6;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .prose td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #1e293b;
+            color: #cbd5e1;
+            font-size: 0.875rem;
+        }
+        .prose tr:last-child td {
+            border-bottom: none;
+        }
+        .prose blockquote {
+            border-left: 4px solid #3b82f6;
+            background-color: #1e293b50;
+            padding: 0.75rem 1rem;
+            margin: 1rem 0;
+            border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .prose blockquote p {
+            margin-bottom: 0;
+            color: #93c5fd;
+            font-style: italic;
+        }
+        .prose code {
+            background-color: #1e293b;
+            color: #f43f5e;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        .prose pre {
+            background-color: #0f172a;
+            border: 1px solid #1e293b;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .prose pre code {
+            background-color: transparent;
+            color: #e2e8f0;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.875rem;
+        }
+        .prose hr {
+            border-color: #1e293b;
+            margin: 2.5rem 0;
+        }
+        
+        /* Mermaid styling */
+        .mermaid-container {
+            background-color: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .mermaid {
+            background-color: transparent !important;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col md:flex-row">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-80 bg-[#0f172a] border-r border-[#1e293b] p-6 flex flex-col shrink-0">
+        <div class="flex items-center space-x-3 mb-8">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white text-lg">I</div>
+            <div>
+                <h1 class="text-white font-bold leading-none text-lg">Intellicheck</h1>
+                <span class="text-xs text-slate-400 font-medium">Architecture Portal</span>
+            </div>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto space-y-1 pr-2" id="toc-nav">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Sections</p>
+            <!-- Generated dynamically -->
+        </nav>
+        
+        <div class="mt-auto pt-6 border-t border-slate-800 text-xs text-slate-500 flex flex-col gap-1">
+            <p>Generated for Sakshi</p>
+            <p>Intellicheck Document Verification</p>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto px-6 py-12 md:px-16 lg:px-24">
+        <article class="max-w-4xl mx-auto prose" id="markdown-container">
+            <!-- Rendered Markdown goes here -->
+        </article>
+    </main>
+
+    <script>
+        // Load embedded markdown content
+        const markdown = "# Intellicheck \u2014 System Architecture\n\n> Intelligent Document Verification Platform  \n> OCR \u00b7 Classification \u00b7 Stamp Detection \u00b7 Address Verification \u00b7 ID Proof Validation\n\n---\n\n## System Overview\n\n```mermaid\ngraph TB\n    subgraph \"\ud83c\udf10 API Gateway\"\n        A1[\"POST /upload<br/>File Upload + Full Processing\"]\n        A2[\"POST /classify<br/>Text-only Classification\"]\n    end\n\n    subgraph \"\ud83e\udde0 Orchestration Layer\"\n        DP[\"DocumentProcessor<br/>\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501<br/>Central Brain<br/>Manages all pipelines\"]\n    end\n\n    subgraph \"\ud83d\udcc4 Input Handling\"\n        PDF[\"PDFParser<br/>pypdfium2<br/>PDF \u2192 Page Images\"]\n        PRE[\"Preprocessor<br/>Blur Detection<br/>Image Sharpening\"]\n    end\n\n    subgraph \"\ud83d\udd0d Analysis Pipelines\"\n        direction TB\n        OCR[\"OCR Pipeline<br/>\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501<br/>PaddleOCR 3.5<br/>Text Extraction\"]\n        CLS[\"Classification<br/>\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501<br/>Rule-Based Scoring<br/>5 Document Types\"]\n        STM[\"Stamp Detection<br/>\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501<br/>YOLOv8 + E-Stamp<br/>QR + Anomaly\"]\n    end\n\n    subgraph \"\u2705 Verification Engine\"\n        direction TB\n        FV[\"Field Validators<br/>Aadhaar \u00b7 PAN \u00b7 Passport<br/>Verhoeff Checksum\"]\n        AV[\"Address Verification<br/>Extract \u00b7 Normalize<br/>Fuzzy Match\"]\n        PC[\"Proof Check<br/>Cross-Document<br/>PASS / REVIEW / REJECT\"]\n    end\n\n    subgraph \"\ud83d\udcbe Storage\"\n        MIO[\"MinIO Object Store<br/>Original + Preprocessed\"]\n    end\n\n    A1 --> DP\n    A2 --> CLS\n    DP --> PDF --> PRE\n    DP --> PRE\n    PRE --> OCR --> CLS\n    DP --> STM\n    DP --> MIO\n    PC --> FV\n    PC --> AV\n\n    style DP fill:#1a1a2e,stroke:#e94560,color:#fff,stroke-width:2px\n    style OCR fill:#16213e,stroke:#0f3460,color:#fff\n    style CLS fill:#16213e,stroke:#0f3460,color:#fff\n    style STM fill:#16213e,stroke:#0f3460,color:#fff\n    style PC fill:#0f3460,stroke:#e94560,color:#fff,stroke-width:2px\n```\n\n---\n\n## Module Map\n\n```\napp/\n\u251c\u2500\u2500 routes/\n\u2502   \u251c\u2500\u2500 upload.py                    \u2190 POST /upload endpoint\n\u2502   \u2514\u2500\u2500 classify.py                  \u2190 POST /classify endpoint\n\u2502\n\u251c\u2500\u2500 services/\n\u2502   \u251c\u2500\u2500 document_processor.py        \u2190 Central orchestrator (592 lines)\n\u2502   \u2514\u2500\u2500 minio_client.py              \u2190 MinIO object storage client\n\u2502\n\u251c\u2500\u2500 document_parsing/\n\u2502   \u2514\u2500\u2500 pdf_parser.py                \u2190 PDF \u2192 page images (pypdfium2)\n\u2502\n\u251c\u2500\u2500 preprocessing/\n\u2502   \u251c\u2500\u2500 blur.py                      \u2190 Multi-region Laplacian blur detection\n\u2502   \u2514\u2500\u2500 utils.py                     \u2190 Image loading utilities\n\u2502\n\u251c\u2500\u2500 ocr/\n\u2502   \u251c\u2500\u2500 engine.py                    \u2190 PaddleOCR 3.5 wrapper\n\u2502   \u251c\u2500\u2500 parser.py                    \u2190 Raw result \u2192 structured blocks\n\u2502   \u2514\u2500\u2500 formatter.py                 \u2190 Blocks \u2192 full text output\n\u2502\n\u251c\u2500\u2500 classification/\n\u2502   \u251c\u2500\u2500 classifier.py                \u2190 Weighted keyword scoring engine\n\u2502   \u251c\u2500\u2500 document_rules.py            \u2190 5 document type rule configs\n\u2502   \u2514\u2500\u2500 result.py                    \u2190 ClassificationResult dataclass\n\u2502\n\u251c\u2500\u2500 stamp_detection/\n\u2502   \u251c\u2500\u2500 detector.py                  \u2190 YOLO orchestrator (StampDetector)\n\u2502   \u251c\u2500\u2500 estamp_classifier.py         \u2190 E-stamp document classifier\n\u2502   \u251c\u2500\u2500 anomaly_detector.py          \u2190 Crop quality checks\n\u2502   \u251c\u2500\u2500 qr_processor.py             \u2190 OpenCV QR decode & presence\n\u2502   \u2514\u2500\u2500 utils.py                     \u2190 Cropping, ink check, visualization\n\u2502\n\u251c\u2500\u2500 address_verification/\n\u2502   \u251c\u2500\u2500 extractor.py                 \u2190 Regex address extraction from OCR\n\u2502   \u251c\u2500\u2500 normalizer.py                \u2190 Abbreviation expansion\n\u2502   \u251c\u2500\u2500 matcher.py                   \u2190 Fuzzy + containment matching\n\u2502   \u251c\u2500\u2500 freshness.py                 \u2190 Document age validation\n\u2502   \u2514\u2500\u2500 validator.py                 \u2190 Full verification orchestrator\n\u2502\n\u251c\u2500\u2500 validation/\n\u2502   \u251c\u2500\u2500 validators.py                \u2190 Aadhaar, PAN, Passport, IFSC validators\n\u2502   \u2514\u2500\u2500 proof_check.py              \u2190 Cross-doc verification \u2192 PASS/REVIEW/REJECT\n\u2502\n\u2514\u2500\u2500 pipelines/\n    \u251c\u2500\u2500 ocr_pipeline.py              \u2190 OCR orchestration\n    \u251c\u2500\u2500 classification_pipeline.py   \u2190 Classification orchestration\n    \u2514\u2500\u2500 stamp_detection_pipeline.py  \u2190 Stamp detection orchestration\n```\n\n---\n\n## Pipeline 1: Document Processing (End-to-End)\n\n```mermaid\ngraph LR\n    subgraph \"INPUT\"\n        UP[\"\ud83d\udcc1 File Upload<br/>(Image or PDF)\"]\n    end\n\n    subgraph \"PARSE\"\n        R{\"PDF?\"}\n        PDF[\"Render Pages<br/>75 DPI \u2192 PNG\"]\n        IMG[\"Load Image<br/>BGR numpy\"]\n    end\n\n    subgraph \"PREPROCESS\"\n        BL[\"Blur Detection<br/>3\u00d73 grid Laplacian\"]\n        SH[\"Sharpen<br/>Unsharp Mask\"]\n    end\n\n    subgraph \"EXTRACT\"\n        OCR[\"PaddleOCR 3.5<br/>Text + Bounding Boxes\"]\n    end\n\n    subgraph \"ANALYZE\"\n        CL[\"Classification<br/>Keyword Scoring\"]\n        ST[\"Stamp Detection<br/>YOLO + E-Stamp\"]\n    end\n\n    subgraph \"STORE\"\n        MI[\"MinIO<br/>Save originals\"]\n    end\n\n    subgraph \"OUTPUT\"\n        RES[\"\ud83d\udccb JSON Response\"]\n    end\n\n    UP --> R\n    R -->|Yes| PDF --> IMG\n    R -->|No| IMG\n    IMG --> BL\n    BL -->|Blurry| SH --> OCR\n    BL -->|Sharp| OCR\n    OCR --> CL --> RES\n    OCR --> ST --> RES\n    IMG --> MI\n\n    style UP fill:#e94560,color:#fff,stroke:none\n    style RES fill:#0f3460,color:#fff,stroke:none\n```\n\n### PDF Multi-Page Handling\n\n```mermaid\ngraph TB\n    PDF[\"\ud83d\udcc4 Multi-page PDF\"] --> RENDER[\"pypdfium2<br/>Render each page\"]\n    RENDER --> P1[\"Page 1 PNG\"]\n    RENDER --> P2[\"Page 2 PNG\"]\n    RENDER --> P3[\"Page N PNG\"]\n    \n    P1 --> PROC1[\"Full Pipeline<br/>OCR \u2192 Classify \u2192 Stamp\"]\n    P2 --> PROC2[\"Full Pipeline<br/>OCR \u2192 Classify \u2192 Stamp\"]\n    P3 --> PROC3[\"Full Pipeline<br/>OCR \u2192 Classify \u2192 Stamp\"]\n    \n    PROC1 --> AGG[\"Aggregate Results\"]\n    PROC2 --> AGG\n    PROC3 --> AGG\n    \n    AGG --> R1[\"OCR: Merge all text\"]\n    AGG --> R2[\"Classification: Best confidence page wins\"]\n    AGG --> R3[\"Stamps: Union all bounding boxes\"]\n\n    style PDF fill:#e94560,color:#fff,stroke:none\n    style AGG fill:#0f3460,color:#fff,stroke:none\n```\n\n---\n\n## Pipeline 2: OCR + Classification\n\n```mermaid\ngraph TB\n    subgraph \"OCR Pipeline\"\n        I[\"Image\"] --> ENG[\"OCREngine<br/>PaddleOCR 3.5<br/>predict()\"]\n        ENG --> PAR[\"OCRParser<br/>Extract: texts, scores, polygons\"]\n        PAR --> FMT[\"OCRFormatter<br/>Join text blocks\"]\n        FMT --> OUT1[\"{ text, total_blocks, results[] }\"]\n    end\n\n    subgraph \"Classification Pipeline\"\n        OUT1 --> CONCAT[\"Concatenate<br/>all text blocks\"]\n        CONCAT --> SCORE[\"Score against<br/>5 document rules\"]\n        SCORE --> WIN[\"Pick highest<br/>scoring type\"]\n        WIN --> REGEX[\"Extract fields<br/>via regex patterns\"]\n        REGEX --> OUT2[\"ClassificationResult\"]\n    end\n\n    style I fill:#e94560,color:#fff,stroke:none\n    style OUT2 fill:#0f3460,color:#fff,stroke:none\n```\n\n### Classification: Document Types & Scoring\n\n```mermaid\ngraph LR\n    TXT[\"OCR Text\"] --> S1[\"Aadhaar<br/>Score: 0.78\"]\n    TXT --> S2[\"PAN<br/>Score: 0.12\"]\n    TXT --> S3[\"Passport<br/>Score: 0.05\"]\n    TXT --> S4[\"Utility Bill<br/>Score: 0.02\"]\n    TXT --> S5[\"Bank Statement<br/>Score: 0.01\"]\n    \n    S1 --> W[\"\ud83c\udfc6 Winner:<br/>aadhaar_card\"]\n    \n    style W fill:#0f3460,color:#fff,stroke:none\n    style S1 fill:#e94560,color:#fff,stroke:none\n```\n\n| Document | Category | Primary Keywords | Extracted Fields |\n|---|---|---|---|\n| **Aadhaar Card** | ID + Address | `aadhaar`, `uidai` | aadhaar_number, DOB, gender, pincode |\n| **PAN Card** | ID only | `permanent account number` | pan_number, DOB |\n| **Passport** | ID + Address | `passport`, `republic of india` | passport_number, DOB, issue/expiry dates |\n| **Utility Bill** | Address only | `electricity bill`, `consumer number` | consumer_number, bill_date, amount |\n| **Bank Statement** | Address only | `bank statement`, `ifsc` | account_number, ifsc_code, period |\n\n### Scoring Weights\n\n| Keyword Tier | Weight | Purpose |\n|---|---|---|\n| **Primary** | +3.0 | Strong identity signals (`aadhaar`, `passport`) |\n| **Secondary** | +2.0 | Supporting context (`government of india`) |\n| **Field Hints** | +1.0 | Weak signals (`dob`, `male`, `s/o`) |\n| **Negative** | \u22122.0 | Disambiguation (`income tax` on Aadhaar = penalty) |\n\n> **Confidence** = matched_score / max_possible_score  \n> Below **0.15** \u2192 classified as `unknown`\n\n---\n\n## Pipeline 3: Stamp Detection\n\n```mermaid\ngraph TB\n    IMG[\"\ud83d\uddbc\ufe0f Input Image\"] --> DET[\"StampDetector.detect()\"]\n    \n    DET --> YOLO\n    DET --> ESTAMP\n    DET --> ANOM\n    \n    subgraph \"\ud83c\udfaf Physical Detection (YOLO)\"\n        YOLO[\"YOLOv8 Model<br/>(best.pt)\"] --> PARSE2[\"Parse Boxes<br/>conf \u2265 0.5\"]\n        PARSE2 --> CROP[\"Crop Each<br/>Detection\"]\n        CROP --> INK[\"Ink Check<br/>(HSV Saturation)\"]\n        INK --> DETS[\"Detections[]<br/>stamp / signature\"]\n    end\n\n    subgraph \"\ud83d\udcdc E-Stamp Classification\"\n        ESTAMP[\"EStampClassifier\"] --> EOCR[\"OCR Text<br/>(reused from pipeline)\"]\n        ESTAMP --> QR[\"QR Processor<br/>OpenCV QR Code\"]\n        EOCR --> ESCORE[\"Weighted Scoring<br/>cert=40, duty=25, state=15\"]\n        QR --> ESCORE\n        ESCORE --> EDEC{\"Score \u2265 50?\"}\n        EDEC -->|Yes| ET[\"\u2705 e_stamp\"]\n        EDEC -->|No| NT[\"\u274c non_e_stamp\"]\n    end\n\n    subgraph \"\ud83d\udd2c Quality Checks\"\n        ANOM[\"AnomalyDetector\"] --> F1[\"Faded? (std &lt; 30)\"]\n        ANOM --> F2[\"Low Contrast? (range &lt; 50)\"]\n        ANOM --> F3[\"Blurry? (Laplacian &lt; 100)\"]\n    end\n\n    DETS --> RESULT[\"\ud83d\udccb Final Result\"]\n    ET --> RESULT\n    NT --> RESULT\n    F1 --> RESULT\n    F2 --> RESULT\n    F3 --> RESULT\n\n    style IMG fill:#e94560,color:#fff,stroke:none\n    style RESULT fill:#0f3460,color:#fff,stroke:none\n    style ET fill:#00b894,color:#fff,stroke:none\n    style NT fill:#636e72,color:#fff,stroke:none\n```\n\n### E-Stamp Scoring Breakdown\n\n| Signal | Points | Detection Method |\n|---|---|---|\n| Certificate Number | **40** | Regex: `IN-MH12345678901234` |\n| Stamp Duty Amount | **25** | Regex: `Rs. 100` (needs context) |\n| State Name | **15** | Match against 22 Indian states |\n| Date | **10** | Multiple date formats |\n| QR Decoded (data) | **5** | OpenCV QRCodeDetector |\n| QR Present (visual) | **2** | Contour-based detection / detect() |\n| **Threshold** | **50** | Score \u2265 50 \u2192 e-stamp confirmed |\n\n> **Context-aware:** Stamp duty, state, and date only count if a certificate number OR e-stamp keyword was already found. Prevents false positives from generic invoices.\n\n### QR Code Detection & Decoding Flow\n\nThe `QRProcessor` (`app/stamp_detection/qr_processor.py`) implements a streamlined QR code detection and decoding workflow designed specifically for standard QR codes using OpenCV. It avoids external barcode or DataMatrix libraries (like pylibdmtx or pyzbar) and progressive cropping loops.\n\n```mermaid\ngraph TD\n    Start[\"\ud83d\udce5 Input Image\"] --> Gray[\"Grayscale Conversion\"]\n    Gray --> Decode{\"1. Try OpenCV QR Decode<br/>(detectAndDecode)\"}\n    \n    Decode -->|Success| Success[\"\u2705 Return QR Data<br/>(qr_present=True, qr_decoded=True)\"]\n    Decode -->|Failed| Visual{\"2. QR Presence Check\"}\n    \n    Visual -->|\"Nested Contours / detect check\"| Found{\"QR Present?\"}\n    Found -->|Yes| Flag[\"\u26a0\ufe0f QR Detected visually but Decode Failed<br/>(qr_present=True, qr_decoded=False)\"]\n    Found -->|No| None[\"\u274c No QR Code Found<br/>(qr_present=False, qr_decoded=False)\"]\n\n    style Start fill:#1a1a2e,stroke:#e94560,color:#fff\n    style Success fill:#00b894,color:#fff\n    style Flag fill:#fdcb6e,color:#000\n    style None fill:#d63031,color:#fff\n```\n\n#### Detailed Decoding Priority\nOpenCV's `cv2.QRCodeDetector` acts as the single unified engine for both QR presence detection and payload decoding.\n\n#### OpenCV QR Presence Logic Check\nTo identify the presence of a QR code even when it is too blurry or distorted to decode, the processor performs a two-layered check:\n1. **Contour-Based Finder Pattern Search:**\n   It uses adaptive thresholding and hierarchical contour scanning to locate nested square-like structures (the typical finder patterns located at three corners of a standard QR code). If at least 2 candidate finder patterns are located, the QR presence flag is raised.\n2. **OpenCV built-in detect Check:**\n   If contour analysis fails, a direct fallback to `cv2.QRCodeDetector().detect()` is performed to double check if a QR code boundary is recognized.\n\n---\n\n## Pipeline 4: Address Verification\n\n```mermaid\ngraph TB\n    subgraph \"Step 1: Extract\"\n        OCR2[\"OCR Text\"] --> EXT[\"AddressExtractor\"]\n        EXT --> PIN[\"Pincode<br/>6-digit regex\"]\n        EXT --> STATE[\"State<br/>32 states list\"]\n        EXT --> CITY[\"City<br/>45+ cities list\"]\n        EXT --> LINE[\"Address Line<br/>Before pincode / labeled\"]\n    end\n\n    subgraph \"Step 2: Normalize\"\n        PIN --> NORM[\"AddressNormalizer\"]\n        STATE --> NORM\n        CITY --> NORM\n        LINE --> NORM\n        NORM --> N1[\"M.G. Rd. \u2192 Mahatma Gandhi Road\"]\n        NORM --> N2[\"Apt. \u2192 Apartment\"]\n        NORM --> N3[\"lowercase + clean\"]\n    end\n\n    subgraph \"Step 3: Match\"\n        N1 --> MAT[\"AddressMatcher\"]\n        N2 --> MAT\n        N3 --> MAT\n        MAT --> P1[\"Pincode: Exact\"]\n        MAT --> P2[\"State: Exact\"]\n        MAT --> P3[\"City: Fuzzy (\u22650.85)\"]\n        MAT --> P4[\"Line1: Fuzzy + Containment\"]\n    end\n\n    subgraph \"Step 4: Decision\"\n        P1 --> DEC{\"All Match?\"}\n        P2 --> DEC\n        P3 --> DEC\n        P4 --> DEC\n        DEC -->|pin+state+3| MATCH[\"\u2705 MATCH\"]\n        DEC -->|pin+state only| PARTIAL[\"\u26a0\ufe0f PARTIAL_MATCH\"]\n        DEC -->|fail| NOMATCH[\"\u274c NO_MATCH\"]\n    end\n\n    style OCR2 fill:#e94560,color:#fff,stroke:none\n    style MATCH fill:#00b894,color:#fff,stroke:none\n    style PARTIAL fill:#fdcb6e,color:#000,stroke:none\n    style NOMATCH fill:#d63031,color:#fff,stroke:none\n```\n\n### Freshness Rules\n\n| Document Type | Maximum Age | Notes |\n|---|---|---|\n| Utility Bill | 90 days | Electricity, water, gas, phone |\n| Bank Statement | 90 days | Account statement |\n| Rental Agreement | 180 days | Lease agreement |\n| Aadhaar / Passport / DL | 10 years | Government-issued IDs |\n\n---\n\n## Pipeline 5: ID Proof Validation & Final Verdict\n\n```mermaid\ngraph TB\n    DOCS[\"\ud83d\udcc4 Processed Documents<br/>(Aadhaar + PAN + Utility Bill)\"] --> GS[\"generate_status()\"]\n    \n    GS --> C1[\"1\ufe0f\u20e3 Required Proofs<br/>\u22651 ID Proof<br/>\u22651 Address Proof\"]\n    GS --> C2[\"2\ufe0f\u20e3 Field Validation<br/>Aadhaar Checksum<br/>PAN Format<br/>Passport Format\"]\n    GS --> C3[\"3\ufe0f\u20e3 Name Match<br/>Cross-document<br/>name consistency\"]\n    GS --> C4[\"4\ufe0f\u20e3 DOB Match<br/>Cross-document<br/>date consistency\"]\n    GS --> C5[\"5\ufe0f\u20e3 Address Match<br/>Cross-document<br/>address consistency\"]\n    GS --> C6[\"6\ufe0f\u20e3 Confidence<br/>Flag if<br/>&lt; 0.30\"]\n\n    C1 -->|Missing| REJ\n    C2 -->|Invalid| REJ\n    C3 -->|Mismatch| REV\n    C4 -->|Mismatch| REV\n    C5 -->|Mismatch| REV\n    C6 -->|Low| REV\n    \n    C1 -->|OK| PASS2\n    C2 -->|OK| PASS2\n    C3 -->|OK| PASS2\n    C4 -->|OK| PASS2\n    C5 -->|OK| PASS2\n    C6 -->|OK| PASS2\n\n    REJ[\"\ud83d\udd34 REJECT<br/>Auto-reject\"]\n    REV[\"\ud83d\udfe1 REVIEW<br/>Manual check\"]\n    PASS2[\"\ud83d\udfe2 PASS<br/>Auto-approve\"]\n\n    style DOCS fill:#e94560,color:#fff,stroke:none\n    style REJ fill:#d63031,color:#fff,stroke:none,stroke-width:2px\n    style REV fill:#fdcb6e,color:#000,stroke:none,stroke-width:2px\n    style PASS2 fill:#00b894,color:#fff,stroke:none,stroke-width:2px\n```\n\n### Proof Categories\n\n```mermaid\ngraph LR\n    subgraph \"\ud83e\udeaa ID Proof Types\"\n        I1[\"Aadhaar Card\"]\n        I2[\"PAN Card\"]\n        I3[\"Passport\"]\n    end\n\n    subgraph \"\ud83c\udfe0 Address Proof Types\"\n        A1[\"Aadhaar Card\"]\n        A2[\"Passport\"]\n        A3[\"Utility Bill\"]\n        A4[\"Bank Statement\"]\n    end\n\n    I1 -.->|\"Counts as both\"| A1\n\n    style I1 fill:#6c5ce7,color:#fff,stroke:none\n    style A1 fill:#6c5ce7,color:#fff,stroke:none\n```\n\n> **Aadhaar** is the only document that counts as **both** ID proof and Address proof.\n\n### Field Validators\n\n| Validator | Format | Special Check |\n|---|---|---|\n| **Aadhaar** | 12 digits, starts 2-9 | **Verhoeff checksum** (UIDAI algorithm) |\n| **PAN** | `ABCDE1234F` | 4th char must be valid holder type |\n| **Passport** | `A1234567` | 1 letter + 7 digits |\n| **Pincode** | 6 digits | Starts with 1-9 |\n| **IFSC** | `XXXX0XXXXXX` | 4 letters + 0 + 6 alphanumeric |\n| **Date** | `DD/MM/YYYY` | Must not be in future |\n\n### Verdict Decision Tree\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502              generate_status(docs)                \u2502\n\u2502                                                  \u2502\n\u2502  Missing ID/Address proof?     \u2500\u2500YES\u2500\u2500\u2192  REJECT  \u2502\n\u2502  Invalid field (checksum)?     \u2500\u2500YES\u2500\u2500\u2192  REJECT  \u2502\n\u2502  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u2502\n\u2502  Name mismatch across docs?    \u2500\u2500YES\u2500\u2500\u2192  REVIEW  \u2502\n\u2502  DOB mismatch across docs?     \u2500\u2500YES\u2500\u2500\u2192  REVIEW  \u2502\n\u2502  Address mismatch across docs? \u2500\u2500YES\u2500\u2500\u2192  REVIEW  \u2502\n\u2502  Low classification confidence?\u2500\u2500YES\u2500\u2500\u2192  REVIEW  \u2502\n\u2502  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u2502\n\u2502  Everything OK?                \u2500\u2500YES\u2500\u2500\u2192  PASS    \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n---\n\n## Data Flow: Complete Request \u2192 Response\n\n```mermaid\nsequenceDiagram\n    participant C as Client\n    participant API as FastAPI /upload\n    participant DP as DocumentProcessor\n    participant PDF as PDFParser\n    participant PRE as Preprocessor\n    participant OCR as OCRPipeline\n    participant CLS as Classifier\n    participant STM as StampDetector\n    participant MIO as MinIO\n\n    C->>API: POST /upload (file bytes)\n    API->>DP: process_from_bytes(bytes, filename)\n    \n    Note over DP: Write to temp file\n    \n    alt PDF file\n        DP->>PDF: parse(pdf_path)\n        PDF-->>DP: [page1.png, page2.png, ...]\n        Note over DP: Process each page independently\n    end\n\n    DP->>PRE: load_image() + detect_blur()\n    PRE-->>DP: quality_info + preprocessed\n\n    opt MinIO enabled\n        DP->>MIO: Save original + preprocessed\n    end\n\n    DP->>OCR: run(image)\n    OCR-->>DP: {text, blocks, bboxes}\n\n    DP->>CLS: run(parsed_blocks)\n    CLS-->>DP: {doc_type, confidence, fields}\n\n    DP->>STM: process(image, ocr_text)\n    Note over STM: YOLO + E-Stamp + QR + Anomaly\n    STM-->>DP: {stamps, signatures, estamp_info}\n\n    DP-->>API: Complete result dict\n    API-->>C: JSON response\n```\n\n---\n\n## Shared Resource: OCR Engine\n\n```mermaid\ngraph TB\n    DP[\"DocumentProcessor\"] --> OE[\"OCREngine<br/>(Single Instance)\"]\n    \n    OE --> OP[\"OCRPipeline<br/>Main text extraction\"]\n    OE --> SP[\"StampDetectionPipeline<br/>E-stamp text analysis\"]\n    \n    Note[\"\u26a1 PaddleOCR loaded ONCE<br/>Shared across pipelines<br/>Saves ~500MB memory\"]\n\n    style OE fill:#e94560,color:#fff,stroke:none,stroke-width:2px\n    style Note fill:#2d3436,color:#dfe6e9,stroke:none\n```\n\n---\n\n## Storage Architecture (MinIO)\n\n```\ndocuments/                          \u2190 Bucket\n\u2514\u2500\u2500 {uuid}/                         \u2190 Per-document folder\n    \u251c\u2500\u2500 original/\n    \u2502   \u2514\u2500\u2500 aadhaar_front.jpg       \u2190 Uploaded file as-is\n    \u2514\u2500\u2500 preprocessed/\n        \u2514\u2500\u2500 aadhaar_front_preprocessed.png  \u2190 After sharpening\n```\n\n---\n\n## Technology Stack\n\n| Layer | Technology | Purpose |\n|---|---|---|\n| **API** | FastAPI | REST endpoints |\n| **OCR** | PaddleOCR 3.5 | Text extraction from images |\n| **Object Detection** | YOLOv8 (Ultralytics) | Stamp & signature localization |\n| **PDF Parsing** | pypdfium2 | PDF page rendering |\n| **QR Code** | OpenCV | QR detection & decoding |\n| **Image Processing** | OpenCV | Blur detection, sharpening, cropping |\n| **Storage** | MinIO | Object storage for documents |\n| **Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |\n\n---\n\n## Program Execution Flow \u2014 Stamp Detection\n\nBelow is the step-by-step program execution flow specifically for the stamp detection system when processing a document via the API or test scripts:\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Client as Client / Test Script\n    participant API as upload.py (POST /upload)\n    participant DP as DocumentProcessor\n    participant PDF as PDFParser (pypdfium2)\n    participant PRE as Preprocessor (OpenCV)\n    participant OCR as OCRPipeline (PaddleOCR)\n    participant CLS as ClassificationPipeline\n    participant SDP as StampDetectionPipeline\n    participant DET as StampDetector (YOLOv8)\n    participant ESC as EStampClassifier\n    participant QR as QRProcessor\n\n    Client->>API: Upload File (Image/PDF bytes)\n    API->>DP: process_from_bytes(file_bytes, filename)\n    Note over DP: Write bytes to temporary file\n\n    alt File is PDF\n        DP->>PDF: parse(pdf_path)\n        PDF-->>DP: Rendered Page PNGs\n        Note over DP: Loop through each page\n    end\n\n    DP->>PRE: Preprocessing (Grayscale + Laplacian Blur Check)\n    PRE-->>DP: Preprocessed Image (Sharpened if blurry)\n\n    DP->>OCR: Run OCR (PaddleOCR)\n    OCR-->>DP: Extracted Text & Blocks\n\n    DP->>CLS: Run Document Classification\n    CLS-->>DP: Doc Type (Aadhaar/PAN/Passport...)\n\n    DP->>SDP: process(image, ocr_text)\n    \n    rect rgb(26, 32, 53)\n        note right of SDP: Stamp Detection Flow (Independent)\n        SDP->>DET: detect(image, ocr_text)\n        \n        DET->>DET: Run YOLOv8 Model (best.pt)\n        Note over DET: Detects physical 'stamps' and 'signatures'\n        \n        DET->>ESC: classify(image, ocr_text)\n        Note over ESC: Checks Certificate regex, state names, stamp duty\n        \n        ESC->>QR: Decode QR\n        QR-->>ESC: Decoded QR Data (matches certificate?)\n        ESC-->>DET: E-Stamp Score (>= 50 is e-stamp)\n        \n        DET->>DET: Run Anomaly Checks on crops (Faded / Contrast / Blur)\n        DET-->>SDP: Combined Stamp Detection Results\n    end\n\n    SDP-->>DP: Serializable JSON (stamps, signatures, anomalies, e-stamp details)\n    \n    alt File is PDF\n        Note over DP: Aggregate results across all pages\n    end\n\n    DP-->>API: Full Processing Result Dict\n    API-->>Client: Final JSON Response\n```\n\n### Flow Breakdown\n\n1. **Upload / Trigger:** The client sends the raw file bytes via `POST /upload` or triggers a local file-based script run.\n2. **Bytes Handoff:** `upload.py` reads raw bytes and forwards them to `DocumentProcessor.process_from_bytes()`.\n3. **Format Check:**\n   - **If PDF:** `PDFParser` renders pages as temporary PNGs. Each page is processed sequentially, and the final results are aggregated.\n   - **If Image:** OpenCV loads the image directly.\n4. **Image Preprocessing:** Checks for blur. If blurry, runs OpenCV sharpening (Unsharp Mask).\n5. **OCR & Document Classification:** PaddleOCR extracts text blocks, which the `ClassificationPipeline` scores to identify the document type.\n6. **Stamp Detection Core:**\n   - **YOLOv8** localizes physical stamps and signatures.\n   - **EStampClassifier** uses OCR regex rules and runs the **QRProcessor** (using OpenCV) to locate/decode QR codes. An e-stamp score >= 50 confirms it as an e-stamp.\n   - **Anomaly Detector** flags any physical detections that are faded, blurry, or low-contrast.\n7. **Aggregation & JSON Response:** Results are structured into a JSON response, removing non-serializable elements like numpy arrays, and returned to the client.\n\n";
+
+        // Initialize Mermaid config
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+            themeVariables: {
+                background: 'transparent',
+                primaryColor: '#1e293b',
+                primaryTextColor: '#f3f4f6',
+                primaryBorderColor: '#334155',
+                lineColor: '#64748b',
+                secondaryColor: '#0f172a',
+                tertiaryColor: '#1e1b4b'
+            }
+        });
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Custom renderer for marked.js to intercept code blocks and detect mermaid.
+        // Marked changed renderer.code from positional args to a token object, so support both.
+        const renderer = new marked.Renderer();
+        const originalCodeRenderer = renderer.code;
+        
+        renderer.code = function(codeOrToken, language, escaped) {
+            const tokenMode = typeof codeOrToken === 'object' && codeOrToken !== null;
+            const code = tokenMode ? codeOrToken.text : codeOrToken;
+            const lang = tokenMode ? codeOrToken.lang : language;
+            const normalizedLang = String(lang || '').trim().split(/\s+/)[0].toLowerCase();
+
+            if (normalizedLang === 'mermaid') {
+                return `<div class="mermaid-container"><pre class="mermaid">${escapeHtml(code)}</pre></div>`;
+            }
+
+            if (typeof originalCodeRenderer === 'function') {
+                return tokenMode
+                    ? originalCodeRenderer.call(this, codeOrToken)
+                    : originalCodeRenderer.call(this, codeOrToken, language, escaped);
+            }
+
+            return `<pre><code>${escapeHtml(code)}</code></pre>`;
+        };
+
+        marked.setOptions({
+            renderer: renderer,
+            gfm: true,
+            breaks: true
+        });
+
+        // Parse and render the Markdown
+        const html = marked.parse(markdown);
+        document.getElementById('markdown-container').innerHTML = html;
+
+        // Populate Table of Contents in the Sidebar
+        const tocNav = document.getElementById('toc-nav');
+        const headings = document.querySelectorAll('#markdown-container h2, #markdown-container h3');
+        
+        headings.forEach((heading, idx) => {
+            const id = 'section-' + idx;
+            heading.id = id;
+            
+            const link = document.createElement('a');
+            link.href = '#' + id;
+            link.innerText = heading.innerText;
+            
+            if (heading.tagName === 'H2') {
+                link.className = "block px-3 py-2 text-sm font-medium text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-colors";
+            } else {
+                link.className = "block pl-6 pr-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 hover:underline transition-colors";
+            }
+            
+            tocNav.appendChild(link);
+        });
+
+        // Render Mermaid diagrams
+        async function renderMermaidDiagrams() {
+            const diagrams = document.querySelectorAll('.mermaid');
+
+            try {
+                if (typeof mermaid.run === 'function') {
+                    await mermaid.run({ nodes: diagrams });
+                } else {
+                    mermaid.init(undefined, diagrams);
+                }
+            } catch (error) {
+                console.error('Mermaid render failed:', error);
+            }
+        }
+
+        renderMermaidDiagrams();
+    </script>
+</body>
+</html>

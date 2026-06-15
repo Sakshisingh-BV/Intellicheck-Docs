@@ -182,9 +182,10 @@ def collect_images(args):
         base_dir = 'data'
     else:
         # Default image path (Change 'data/Stamp3.png' here to test a different default image)
-        return ['data/Stamp8.png']
+        return ['data/Stamp2.png']
 
     images = []
+
     for ext in SUPPORTED_EXTS:
         images.extend(glob.glob(os.path.join(base_dir, f'*{ext}')))
         images.extend(glob.glob(os.path.join(base_dir, f'*{ext.upper()}')))
