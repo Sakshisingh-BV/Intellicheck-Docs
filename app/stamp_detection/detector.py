@@ -14,6 +14,11 @@ import logging
 import os
 from typing import List, Dict, Optional
 
+os.environ.setdefault(
+    "YOLO_CONFIG_DIR",
+    os.path.abspath(os.path.join(os.getcwd(), ".ultralytics")),
+)
+
 # Fix PyTorch 2.6+ security issue with model loading
 _original_load = torch.load
 def torch_load_with_globals(*args, **kwargs):
@@ -97,9 +102,16 @@ class StampDetector:
 
     def __init__(self, model_path: str = "app/models/best.pt",
                  confidence_threshold: float = 0.5,
+<<<<<<< HEAD
                  signature_confidence_threshold: float = 0.5):
         """Initialize detector — loads YOLO model and creates sub-modules.
 
+=======
+                 signature_confidence_threshold: float = 0.5,
+                 ocr_engine=None):
+        """Initialize detector — uses project OCREngine (PaddleOCR v3.5).
+        
+>>>>>>> 1dc1c43ed34bc5c46382cff3eb2943ac595e8e24
         Args:
             model_path: Path to YOLO model
             confidence_threshold: Threshold for stamps (default 0.5)
@@ -114,9 +126,17 @@ class StampDetector:
         self.signature_confidence_threshold = signature_confidence_threshold
         logger.info(f"YOLO class names: {self.model.names}")
 
+<<<<<<< HEAD
         # Initialise OCR engine (shared with EStampClassifier)
         ocr_engine = None
         if HAS_OCR:
+=======
+        # Reuse the project-wide OCR engine (PaddleOCR v3.5 compatible)
+        if ocr_engine is not None:
+            self.ocr_engine = ocr_engine
+            logger.info("Reusing shared OCREngine for e-stamp text extraction")
+        elif HAS_OCR:
+>>>>>>> 1dc1c43ed34bc5c46382cff3eb2943ac595e8e24
             try:
                 ocr_engine = OCREngine()
                 logger.info("OCREngine initialised for e-stamp text extraction")
@@ -141,7 +161,8 @@ class StampDetector:
     # Public API
     # ------------------------------------------------------------------
 
-    def detect(self, image_input, return_crops: bool = True) -> Dict:
+    def detect(self, image_input, return_crops: bool = True,
+               ocr_text: Optional[str] = None) -> Dict:
         """
         Detect stamps/signatures and classify document type independently.
 
@@ -183,8 +204,24 @@ class StampDetector:
             # Step 2: E-stamp classification (OCR + QR + scoring)
             estamp_result = self.estamp_classifier.classify(image)
 
+<<<<<<< HEAD
             # Step 3: Anomaly checks (per-crop)
             detections = AnomalyDetector.detect_anomalies(detections)
+=======
+            # ----------------------------------------------------------
+            # Step 2: Full-page OCR with blur-aware retry
+            # ----------------------------------------------------------
+            if ocr_text is not None:
+                full_text = ocr_text
+                blur_info = {
+                    "blur_score": None,
+                    "blur_level": "unknown",
+                    "is_blurry": False,
+                    "ocr_retried": False,
+                }
+            else:
+                full_text, blur_info = self._run_full_page_ocr(image)
+>>>>>>> 1dc1c43ed34bc5c46382cff3eb2943ac595e8e24
 
             # Step 4: Build summary (physical objects only)
             summary = self._create_summary(detections)

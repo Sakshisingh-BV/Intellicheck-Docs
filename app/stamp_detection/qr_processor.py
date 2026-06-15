@@ -163,7 +163,7 @@ class QRProcessor:
         if HAS_DMTX and HAS_PIL:
             try:
                 pil_img = PILImage.fromarray(gray)
-                results = _dmtx_decode(pil_img, timeout=3000)
+                results = _dmtx_decode(pil_img, timeout=500)
                 if results:
                     payload = results[0].data.decode("utf-8", errors="replace").strip()
                     if payload:
@@ -245,7 +245,10 @@ class QRProcessor:
         except Exception as e:
             logger.debug(f"Barcode presence detection error: {e}")
             return False
+<<<<<<< HEAD
 
         except Exception as e:
             logger.debug(f"Barcode presence detection error: {e}")
             return None
+=======
+>>>>>>> 1dc1c43ed34bc5c46382cff3eb2943ac595e8e24

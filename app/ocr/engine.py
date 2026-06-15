@@ -6,7 +6,11 @@ class OCREngine:
     def __init__(self):
 
         self.ocr = PaddleOCR(
-            use_textline_orientation=True,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            text_det_limit_side_len=640,
+            text_det_limit_type="max",
             lang='en',
             device='cpu',
             enable_mkldnn=False

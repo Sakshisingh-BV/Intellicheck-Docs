@@ -88,6 +88,30 @@ class DocumentClassifier:
             all_scores=all_scores,
         )
 
+    @staticmethod
+    def _keyword_matches(keyword_lower: str, text_lower: str) -> bool:
+        """
+        Check if a keyword matches within the OCR text.
+
+        For single-word keywords, uses direct substring matching.
+        For multi-word keywords, first tries exact substring matching.
+        If that fails, checks whether all individual words of the
+        keyword appear anywhere in the text. This handles OCR text
+        blocks that may not appear in the expected reading order
+        (e.g., "Identification Authority of India Unique" instead of
+        "Unique Identification Authority of India").
+        """
+        # Fast path: exact substring match
+        if keyword_lower in text_lower:
+            return True
+
+        # For multi-word keywords, check if all words are present
+        words = keyword_lower.split()
+        if len(words) > 1:
+            return all(word in text_lower for word in words)
+
+        return False
+
     def _score_document_type(self, text_lower: str, rule: dict) -> tuple:
         """
         Compute a weighted keyword score for one document type.
@@ -106,27 +130,27 @@ class DocumentClassifier:
         # Score primary keywords
         for kw in keywords.get("primary", []):
             max_possible += PRIMARY_WEIGHT
-            if kw.lower() in text_lower:
+            if self._keyword_matches(kw.lower(), text_lower):
                 raw_score += PRIMARY_WEIGHT
                 matched.append(kw)
 
         # Score secondary keywords
         for kw in keywords.get("secondary", []):
             max_possible += SECONDARY_WEIGHT
-            if kw.lower() in text_lower:
+            if self._keyword_matches(kw.lower(), text_lower):
                 raw_score += SECONDARY_WEIGHT
                 matched.append(kw)
 
         # Score field hint keywords
         for kw in keywords.get("field_hints", []):
             max_possible += FIELD_HINT_WEIGHT
-            if kw.lower() in text_lower:
+            if self._keyword_matches(kw.lower(), text_lower):
                 raw_score += FIELD_HINT_WEIGHT
                 matched.append(kw)
 
         # Apply negative keyword penalties
         for kw in negative_keywords:
-            if kw.lower() in text_lower:
+            if self._keyword_matches(kw.lower(), text_lower):
                 raw_score += NEGATIVE_PENALTY
 
         # Normalize to 0.0 – 1.0
