@@ -1,3 +1,16 @@
+> ### 🚨 **IMPORTANT NOTE: LOAD ARCHITECTURE DIAGRAMS**
+>
+> 🔴 **STEP 1:** Install the **`Mermaid Preview`** or **`Markdown Preview Mermaid Support`** extension in VS Code.
+> 
+> 🔴 **STEP 2:** **Save your changes** and **restart your IDE** entirely.
+> 
+> 🔴 **STEP 3:** Open the **`ARCHITECTURE.md`** file.
+> 
+> 🔴 **STEP 4:** Press **`Ctrl + Shift + V`** on your keyboard to trigger the Markdown preview and render the live pipeline diagrams.
+
+
+
+
 ## 1. Data Matrix Decoding (Indian e-Stamp Documents)
 
 Some Indian e-Stamp documents use **Data Matrix codes** instead of standard QR codes.
