@@ -9,6 +9,10 @@ minio==7.2.20
 celery==5.6.3
 redis==7.4.0
 
+# Database (PostgreSQL)
+sqlalchemy==2.0.41
+psycopg2-binary==2.9.10
+
 # Document image processing
 numpy==1.26.4
 opencv-python==4.10.0.84

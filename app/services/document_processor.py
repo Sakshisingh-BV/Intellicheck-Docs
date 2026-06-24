@@ -12,7 +12,7 @@ import cv2
 import uuid
 import tempfile
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable, Set
 
 from app.preprocessing.utils import load_image
 from app.preprocessing.blur import detect_blur, sharpen_image
@@ -70,6 +70,8 @@ class DocumentProcessor:
         doc_id: Optional[str] = None,
         save_minio: bool = False,
         output_dir: Optional[str] = None,
+        features: Optional[Set[str]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -114,6 +116,8 @@ class DocumentProcessor:
                 save_minio=save_minio,
                 filename=filename,
                 output_dir=output_dir,
+                features=features,
+                progress_callback=progress_callback,
                 **metadata
             )
 
@@ -132,6 +136,8 @@ class DocumentProcessor:
             save_minio=save_minio,
             filename=filename,
             output_dir=output_dir,
+            features=features,
+            progress_callback=progress_callback,
             **metadata
         )
 
@@ -144,9 +150,16 @@ class DocumentProcessor:
         page_number: Optional[int] = None,
         source_file: Optional[str] = None,
         output_dir: Optional[str] = None,
+        features: Optional[Set[str]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         filename = filename or os.path.basename(image_path)
+
+        # When features is None, run everything (backward compatible)
+        run_stamp = features is None or "stamp" in features or "signature" in features
+        run_address = features is None or "address" in features
+        run_idproof = features is None or "idproof" in features
 
         result = {
             "doc_id": doc_id,
@@ -162,11 +175,15 @@ class DocumentProcessor:
         if source_file:
             result["source_file"] = source_file
 
-        # Merge any additional metadata
-        result.update(kwargs)
+        # Merge any additional metadata (excludes features/progress_callback)
+        extra = {k: v for k, v in kwargs.items()
+                 if k not in ("features", "progress_callback")}
+        result.update(extra)
 
         try:
             # ── Step 1: Preprocessing ──
+            if progress_callback:
+                progress_callback("PREPROCESSING")
             logger.info(f"Processing {filename} (doc_id={doc_id})")
 
             image = load_image(image_path)
@@ -227,6 +244,8 @@ class DocumentProcessor:
                 result["preprocessing"] = preprocessing_info
 
             # ── Step 3: Run OCR ──
+            if progress_callback:
+                progress_callback("OCR")
             logger.info(f"Running OCR for {doc_id}")
             parsed_result, formatted_result, _ = self.ocr_pipeline.run(
                 image,
@@ -241,20 +260,61 @@ class DocumentProcessor:
             classification_result = self.classification_pipeline.run(parsed_result)
             result["classification"] = classification_result.to_dict()
 
-            # ── Step 5: Stamp / Signature / QR Detection ──
-            logger.info(f"Running stamp detection for {doc_id}")
-            stamp_result = self.stamp_pipeline.process(
-                image,
-                image_path=image_path,
-                ocr_text=formatted_result.get("text", ""),
-            )
-            result["stamp_detection"] = self._serialize_stamp_result(stamp_result)
-
-            # Save bounding box visualization if output_dir is set
-            if output_dir and stamp_result.get("success"):
-                self._save_detection_visualization(
-                    image, stamp_result, output_dir, filename, page_number
+            # ── Step 5: Stamp / Signature / QR Detection (conditional) ──
+            if run_stamp:
+                if progress_callback:
+                    progress_callback("STAMP_DETECTION")
+                logger.info(f"Running stamp detection for {doc_id}")
+                stamp_result = self.stamp_pipeline.process(
+                    image,
+                    image_path=image_path,
+                    ocr_text=formatted_result.get("text", ""),
                 )
+                result["stamp_detection"] = self._serialize_stamp_result(stamp_result)
+
+                # Report signature detection as a separate progress stage
+                if progress_callback:
+                    progress_callback("SIGNATURE_DETECTION")
+
+                # Save bounding box visualization if output_dir is set
+                if output_dir and stamp_result.get("success"):
+                    self._save_detection_visualization(
+                        image, stamp_result, output_dir, filename, page_number
+                    )
+
+            # ── Step 6: Address Extraction (conditional) ──
+            if run_address:
+                if progress_callback:
+                    progress_callback("ADDRESS_CHECK")
+                logger.info(f"Running address extraction for {doc_id}")
+                try:
+                    from app.address_verification.extractor import AddressExtractor
+
+                    ocr_text = formatted_result.get("text", "")
+                    extracted_address = AddressExtractor.extract_from_text(ocr_text)
+                    result["address_extraction"] = extracted_address or {}
+                except Exception as addr_err:
+                    logger.warning(f"Address extraction failed for {doc_id}: {addr_err}")
+                    result["address_extraction"] = {"error": str(addr_err)}
+
+            # ── Step 7: ID Proof Field Validation (conditional) ──
+            if run_idproof:
+                if progress_callback:
+                    progress_callback("ID_PROOF_CHECK")
+                logger.info(f"Running field validation for {doc_id}")
+                try:
+                    from app.validation.validators import validate_extracted_fields
+
+                    doc_type = classification_result.document_type
+                    fields = classification_result.extracted_fields
+                    if fields:
+                        validation = validate_extracted_fields(doc_type, fields)
+                        result["field_validation"] = validation
+                    else:
+                        result["field_validation"] = {"valid": True, "results": {}}
+                except Exception as val_err:
+                    logger.warning(f"Field validation failed for {doc_id}: {val_err}")
+                    result["field_validation"] = {"valid": False, "error": str(val_err)}
 
             result["status"] = "completed"
 
@@ -276,6 +336,8 @@ class DocumentProcessor:
         save_minio: bool = False,
         filename: Optional[str] = None,
         output_dir: Optional[str] = None,
+        features: Optional[Set[str]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         filename = filename or os.path.basename(pdf_path)
@@ -287,7 +349,9 @@ class DocumentProcessor:
             "classification": None,
             "stamp_detection": None,
         }
-        result.update(kwargs)
+        extra = {k: v for k, v in kwargs.items()
+                 if k not in ("features", "progress_callback")}
+        result.update(extra)
 
         page_images = []
 
@@ -305,6 +369,8 @@ class DocumentProcessor:
                     page_number=page_image.page_number,
                     source_file=filename,
                     output_dir=output_dir,
+                    features=features,
+                    progress_callback=progress_callback,
                 )
                 pages.append(page_result)
 
