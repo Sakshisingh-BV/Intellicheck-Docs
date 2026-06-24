@@ -1,300 +1,243 @@
-> ### 🚨 **IMPORTANT NOTE: LOAD ARCHITECTURE DIAGRAMS**
->
-> 🔴 **STEP 1:** Install the **`Mermaid Preview`** or **`Markdown Preview Mermaid Support`** extension in VS Code.
-> 
-> 🔴 **STEP 2:** **Save your changes** and **restart your IDE** entirely.
-> 
-> 🔴 **STEP 3:** Open the **`ARCHITECTURE.md`** file.
-> 
-> 🔴 **STEP 4:** Press **`Ctrl + Shift + V`** on your keyboard to trigger the Markdown preview and render the live pipeline diagrams.
+# Intellicheck — Document Intelligence Platform
 
+> **OCR · Classification · Stamp Detection · Address Verification · ID Proof Validation**
 
+Intelligent document processing pipeline that accepts images or PDFs, extracts text via PaddleOCR, classifies document types, detects stamps/signatures (YOLOv8), verifies e-stamps, and validates ID fields — all with async background processing via Celery + Redis.
 
-
-## 1. Data Matrix Decoding (Indian e-Stamp Documents)
-
-Some Indian e-Stamp documents use **Data Matrix codes** instead of standard QR codes.
-
-### Install Dependency
-
-```bash
-pip install pylibdmtx
-```
-
-Add to `requirements.txt`:
-
-```text
-pylibdmtx
-```
+> **📐 Architecture Details:** See [ARCHITECTURE.md](ARCHITECTURE.md) for Mermaid diagrams, pipeline flows, and design decisions.  
+> Install the **Mermaid Preview** or **Markdown Preview Mermaid Support** VS Code extension, then press **Ctrl + Shift + V** to render the diagrams.
 
 ---
 
-### QR/Data Matrix Processing
+## Prerequisites
 
-The project uses a dedicated:
+| Service | Required | Notes |
+|---------|----------|-------|
+| **Python 3.10+** | ✅ | Tested on 3.10–3.12 |
+| **Redis** | ✅ | Message broker for Celery background tasks |
+| **PostgreSQL** | ✅ | Job tracking, audit trail, result storage |
+| **MinIO** | Optional | Object storage for document images |
 
-```text
-app/stamp_detection/qr_processor.py
+### Install Redis (Windows)
+
+Download and install from [Redis for Windows](https://github.com/microsoftarchive/redis/releases) or use WSL:
+```bash
+# WSL
+sudo apt install redis-server
+redis-server
 ```
 
-module for decoding QR/Data Matrix codes.
+### Install PostgreSQL (Windows)
 
-Workflow:
-
-```text
-Document Image
-    ↓
-Data Matrix Decode (pylibdmtx)
-    ↓
-If decode fails:
-    Grayscale
-    ↓
-    CLAHE Contrast Enhancement
-    ↓
-    2x Upscale
-    ↓
-    Retry Decode
-```
+Download from https://www.postgresql.org/download/windows/ and install with default settings.
 
 ---
 
-### Test Decoder
+## Setup
 
-### Run Tests
-
-**Note:** Please activate the virtual environment before running the test script.
-
-```bash
-python tests/stamp_detection/test_stamp_detector_simple.py
-```
-
-### Test a Different Image
-
-To test with a different image, update the image path in:
-
-```text
-tests/stamp_detection/test_stamp_detector_simple.py
-```
-
-Modify the image path at **line 163** and rerun the script.
-
-# MinIO Setup README
-
-## 1. Create Virtual Environment
+### 1. Create Virtual Environment
 
 ```bash
 python -m venv venv
 ```
 
-Activate:
-
-### PowerShell
-
-```bash
+Activate (PowerShell):
+```powershell
 .\venv\Scripts\Activate.ps1
 ```
 
----
-
-## 2. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
-pip install fastapi uvicorn minio python-multipart opencv-python
+pip install -r requirements.txt
 ```
+
+### 3. Create PostgreSQL Database
+
+```bash
+psql -U postgres -c "CREATE DATABASE intellicheck;"
+```
+
+Default connection: `postgresql://postgres:postgres@localhost:5432/intellicheck`
+
+To customize, set the environment variable:
+```powershell
+$env:DATABASE_URL = "postgresql://user:password@host:5432/dbname"
+```
+
+> **Note:** Database tables are auto-created when FastAPI starts — no manual schema setup needed.
 
 ---
 
-## 3. Download MinIO
+## Running the System
 
-Download:
+### Full Production Stack (3 Terminals)
 
-https://dl.min.io/server/minio/release/windows-amd64/minio.exe
+```bash
+# ── Terminal 1: Redis ──
+redis-server
 
-Move:
+# ── Terminal 2: Celery Worker ──
+.\venv\Scripts\Activate.ps1
+celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 
-```text
-minio.exe
+# ── Terminal 3: FastAPI Server ──
+.\venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
 ```
 
-inside project root.
-
----
-
-## 4. Create MinIO Storage Folder
-
-Project root:
-
-```text
-minio-data/
-```
-
----
-
-## 5. Run MinIO
+### Optional: Start MinIO (Terminal 4)
 
 ```bash
 .\minio.exe server minio-data
 ```
 
----
+MinIO Dashboard: http://127.0.0.1:9000 (login: `minioadmin` / `minioadmin`)
 
-## 6. Open MinIO Dashboard
+> Create a bucket named **`documents`** from the MinIO dashboard.
 
-Terminal will show:
+### Open Swagger UI
 
-```text
-API: http://127.0.0.1:9000
-WebUI: http://127.0.0.1:xxxxx
-```
-
-Open WebUI URL in browser.
-
-Login:
-
-```text
-username: minioadmin
-password: minioadmin
-```
+Navigate to: **http://127.0.0.1:8000/docs**
 
 ---
 
-## 7. Create Bucket
+## API Usage
 
-Create bucket:
+### Async Upload (Default — for large files)
 
-```text
-documents
-```
-
----
-
-## 8. Run Backend and Test Upload
-
-Run FastAPI backend:
-
-```bash id="c8z0fq"
-uvicorn app.main:app --reload
-```
-
-Open Swagger docs:
-
-```text id="q8d1jh"
-http://127.0.0.1:8000/docs
-```
-
-Use the `/upload` endpoint to upload an image and verify that:
-
-* image upload works successfully
-* original image is stored in MinIO
-* preprocessed image is stored in MinIO
-
----
-
-## 9. Important About Git Push
-
-Note: `minio.exe` is not pushed to GitHub because GitHub blocks files larger than 100 MB.
-
----
-
-## 10. Important `.gitignore`
-
-Create:
-
-```text id="w5m2tx"
-.gitignore
-```
-
-Add:
-
-```text id="3u6yad"
-venv/
-minio-data/
-__pycache__/
-.env
-```
-
-So:
-
-* virtual env
-* MinIO storage
-* cache
-* secrets
-
-GitHub pe upload na ho.
-
----
-
-## 11. Document Processing Pipeline
-
-`scripts/run_document_pipeline.py` runs the full document intelligence pipeline on a single file (PDF or image) and outputs results as JSON.
-
-### Pipeline Flow
-
-```text
-Input (PDF/Image) → Preprocessing → OCR → Classification → Stamp Detection → JSON + Visualizations
-```
-
-- **PDF files** are automatically parsed page-by-page using the `PDFParser` module (`app/document_parsing/pdf_parser.py`).
-- **Image files** (JPG, JPEG, PNG, WEBP, BMP, TIFF) are processed directly.
-
-### Usage
+Upload returns instantly with a `job_id`. Processing happens in the background.
 
 ```bash
-python scripts/run_document_pipeline.py <input_file> [options]
+# Upload a document
+curl -X POST http://localhost:8000/upload -F "file=@data/estamp2.pdf"
 ```
 
-### Options
+Response:
+```json
+{
+  "job_id": "abc-123-...",
+  "doc_id": "def-456-...",
+  "filename": "estamp2.pdf",
+  "status": "queued",
+  "features": ["address", "idproof", "signature", "stamp"],
+  "poll_url": "/jobs/abc-123-..."
+}
+```
+
+Poll for results:
+```bash
+curl http://localhost:8000/jobs/abc-123-...
+```
+
+Response (while processing):
+```json
+{ "status": "processing", "step": "OCR" }
+```
+
+Response (when complete):
+```json
+{ "status": "completed", "result": { "...full pipeline output..." } }
+```
+
+### Sync Upload (for testing / small files)
+
+Blocks until processing completes and returns the full result:
+```bash
+curl -X POST "http://localhost:8000/upload?sync=true" -F "file=@data/sample.webp"
+```
+
+### Feature Selection
+
+Only run specific analysis steps (OCR + classification always run):
+```bash
+# Only stamp + signature detection
+curl -X POST "http://localhost:8000/upload?features=stamp,signature" -F "file=@data/sample.webp"
+
+# Only address + ID proof validation
+curl -X POST "http://localhost:8000/upload?features=address,idproof" -F "file=@data/aadhaar.jpg"
+```
+
+Available features: `stamp`, `signature`, `address`, `idproof`
+
+### Text-Only Classification
+
+Classify document type from raw text (no file upload):
+```bash
+curl -X POST http://localhost:8000/classify \
+  -H "Content-Type: application/json" \
+  -d '{"text": "GOVERNMENT OF INDIA AADHAAR..."}'
+```
+
+### List / Filter Jobs
+
+```bash
+# List recent jobs
+curl "http://localhost:8000/jobs?limit=10"
+
+# Filter by status
+curl "http://localhost:8000/jobs?status=completed&limit=10"
+curl "http://localhost:8000/jobs?status=failed"
+```
+
+### Health Check
+
+```bash
+curl http://localhost:8000/
+# {"message": "Backend running"}
+```
+
+---
+
+## API Endpoints Summary
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/upload` | Async upload → returns `job_id` |
+| `POST` | `/upload?sync=true` | Sync upload → returns full result |
+| `POST` | `/upload?features=stamp,address` | Upload with feature selection |
+| `GET` | `/jobs/{job_id}` | Poll job status / get result |
+| `GET` | `/jobs` | List recent jobs (filterable) |
+| `POST` | `/classify` | Classify text without file upload |
+| `GET` | `/` | Health check |
+
+---
+
+## Running Without Celery/Redis/PostgreSQL (Local Testing)
+
+CLI scripts directly call `DocumentProcessor` — no background infrastructure needed:
+
+```bash
+# Full pipeline on a single file
+python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/result.json
+
+# Process an image
+python scripts/run_document_pipeline.py data/sample.webp --no-minio --output data/test_outputs/result.json
+
+# With MinIO enabled
+python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/result.json
+```
+
+### CLI Options
 
 | Flag | Description |
 |------|-------------|
 | `-o`, `--output <path>` | Save JSON result to a file. Bounding-box visualizations are saved in the same directory. |
 | `--no-minio` | Disable MinIO integration (default: enabled). |
 
-### Examples
-
-```bash
-# Process a PDF without MinIO, save result to JSON
-python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/estamp2_result.json
-
-# Process an image with MinIO enabled
-python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json
-
-# Process an image without MinIO
-python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json --no-minio
-```
-
-### Output
-
-The pipeline prints the full JSON result to the console and optionally saves it to the specified output file. For stamp/signature/QR detections, annotated bounding-box visualization images are saved alongside the JSON output.
+> The `?sync=true` API mode also works without Celery — it processes synchronously. PostgreSQL is still expected for FastAPI startup table checks, but a warning is logged and the server starts normally if PostgreSQL is unavailable.
 
 ---
 
-## 12. Document Verification Test
+## Document Verification Test
 
-`tests/test_document_verification.py` is a manual end-to-end test script that runs the complete document verification flow interactively.
-
-### Verification Flow
-
-```text
-Enter Customer Address → Provide Document Paths → OCR → Classification
-    → Address Verification → Field Validation → Proof Checks → CLEAR / REVIEW / REJECT
-```
-
-### Supported Formats
-
-PDF, JPG, JPEG, PNG
-
-- **PDF files** are parsed via the `PDFParser` module — each page is processed separately through OCR, classification, and verification.
-- **Image files** are processed directly.
-
-### Usage
+Interactive end-to-end verification flow:
 
 ```bash
 python tests/test_document_verification.py
 ```
 
-The script will interactively prompt for:
-
+The script prompts for:
 1. **Customer Address** — line 1, city, state, pincode
 2. **Document Paths** — enter file paths one per line (empty line to finish)
 
@@ -302,32 +245,68 @@ The script will interactively prompt for:
 
 | Check | Description |
 |-------|-------------|
-| **Document Classification** | Identifies document type (Aadhaar, PAN, Passport, etc.) with confidence score. |
-| **Address Verification** | Compares addresses extracted from documents against the customer address. |
-| **Field Validation** | Validates extracted fields (PAN format, Aadhaar checksum, pincode, dates, etc.). |
-| **Cross-Document Checks** | Verifies name, DOB, and address consistency across multiple documents. |
-| **Proof Requirements** | Checks that at least one ID proof and one address proof are provided. |
+| **Document Classification** | Identifies document type (Aadhaar, PAN, Passport, etc.) with confidence score |
+| **Address Verification** | Compares OCR-extracted addresses against customer address |
+| **Field Validation** | Validates Aadhaar checksum, PAN format, passport number, dates |
+| **Cross-Document Checks** | Verifies name, DOB, and address consistency across documents |
+| **Proof Requirements** | Checks that at least one ID proof and one address proof are provided |
 
-### Final Decision
+### Verdicts
 
-The script outputs one of three verdicts:
+- **CLEAR** — All checks passed
+- **REVIEW** — Minor issues (low confidence, partial mismatches)
+- **REJECT** — Critical failures (invalid fields, missing proofs)
 
-- **CLEAR** — All checks passed.
-- **REVIEW** — Minor issues detected (e.g., low confidence, DOB mismatch).
-- **REJECT** — Critical failures (e.g., invalid fields, missing proofs).
+---
 
-### Example
+## Stamp Detection Test
 
 ```bash
-python tests/test_document_verification.py
+python tests/stamp_detection/test_stamp_detector_simple.py
 ```
+
+To test with a different image, update the image path at **line 163** of the test script.
+
+---
+
+## Environment Variables
+
+All settings are configurable via environment variables. Defaults work for local development.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/intellicheck` | PostgreSQL connection |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
+| `CELERY_BROKER_URL` | Same as `REDIS_URL` | Celery message broker |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Celery result backend |
+| `MAX_UPLOAD_SIZE_MB` | `100` | Maximum upload file size |
+| `UPLOAD_TEMP_DIR` | `data/uploads/` | Temporary file storage |
+| `JOB_RESULT_TTL_SECONDS` | `86400` | Job result TTL in Redis (24h) |
+| `MINIO_ENDPOINT` | `127.0.0.1:9000` | MinIO server address |
+| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
+| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
+| `MINIO_BUCKET` | `documents` | MinIO bucket name |
+| `MINIO_SECURE` | `false` | Use HTTPS for MinIO |
+
+---
+
+## Project Structure
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete module map, pipeline diagrams, and detailed design documentation.
+
+---
+
+## .gitignore
+
+Ensure these are excluded from version control:
 
 ```text
-==================================================
-DOCUMENT VERIFICATION - Manual Test Script
-==================================================
-
-# 1. Enter customer address when prompted
-# 2. Provide document file paths (PDF or images)
-# 3. View results: classification, address match, field validation, final decision
+venv/
+minio-data/
+data/uploads/
+__pycache__/
+.env
+*.pyc
 ```
+
+> `minio.exe` is not pushed to GitHub (>100 MB limit). Download it from https://dl.min.io/server/minio/release/windows-amd64/minio.exe

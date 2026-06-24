@@ -9,12 +9,27 @@
 
 ```mermaid
 graph TB
+<<<<<<< HEAD
     subgraph "🌐 Clients & API Gateway (FastAPI)"
         C["Client Application / User"]
         A1["POST /upload<br/>(Async Upload / Job Queue)"]
         A2["GET /jobs/{id}<br/>(Status & Results Polling)"]
         A3["GET /jobs<br/>(Job History List)"]
         A4["POST /classify<br/>(Text-only Classification)"]
+=======
+    subgraph "🌐 API Gateway (FastAPI)"
+        A1["POST /upload<br/>Async Upload → job_id"]
+        A1S["POST /upload?sync=true<br/>Sync Processing"]
+        A2["POST /classify<br/>Text-only Classification"]
+        A3["GET /jobs/{id}<br/>Poll Job Status"]
+        A4["GET /jobs<br/>List All Jobs"]
+        A5["GET /<br/>Health Check"]
+    end
+
+    subgraph "⚡ Background Processing"
+        RD[("Redis<br/>Message Queue")]
+        CW["Celery Worker<br/>━━━━━━━━━━━━━━━<br/>Lazy-loads models once<br/>Processes documents"]
+>>>>>>> 07eb263e492d3dfeadd231b7bc3a77f94edacd44
     end
 
     subgraph "🔀 Queue & Persistence"
@@ -48,8 +63,10 @@ graph TB
 
     subgraph "💾 Storage"
         MIO["MinIO Object Store<br/>Original + Preprocessed"]
+        PG[("PostgreSQL<br/>Job Tracking + Audit")]
     end
 
+<<<<<<< HEAD
     %% Client Interactions
     C -->|Upload Document| A1
     C -->|Poll Status / Results| A2
@@ -71,6 +88,16 @@ graph TB
     W -->|Update Progress Stages / Final Result| PG
 
     %% Core Document Processor Flow
+=======
+    A1 -->|"Stream to disk"| RD
+    A1 -->|"Create job row"| PG
+    A1S --> DP
+    A2 --> CLS
+    A3 --> PG
+    A4 --> PG
+    RD --> CW --> DP
+    CW -->|"Update progress"| PG
+>>>>>>> 07eb263e492d3dfeadd231b7bc3a77f94edacd44
     DP --> PDF --> PRE
     DP --> PRE
     PRE --> OCR --> CLS
@@ -80,6 +107,9 @@ graph TB
     PC --> AV
 
     style DP fill:#1a1a2e,stroke:#e94560,color:#fff,stroke-width:2px
+    style RD fill:#e94560,color:#fff,stroke:none
+    style PG fill:#0f3460,color:#fff,stroke:none
+    style CW fill:#16213e,stroke:#e94560,color:#fff
     style OCR fill:#16213e,stroke:#0f3460,color:#fff
     style CLS fill:#16213e,stroke:#0f3460,color:#fff
     style STM fill:#16213e,stroke:#0f3460,color:#fff
@@ -93,6 +123,7 @@ graph TB
 
 ## What Happens When You Upload a Document
 
+<<<<<<< HEAD
 ### Step 0: You Run These Commands in Terminal
 
 ```bash
@@ -106,6 +137,104 @@ celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 # ── Terminal 3: Start FastAPI ──
 .\venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
+=======
+```
+app/
+├── main.py                              ← FastAPI app factory, router registration
+│
+├── core/
+│   └── config.py                        ← Centralized settings (limits, URLs, features)
+│
+├── routes/
+│   ├── upload.py                        ← POST /upload (streaming + async/sync)
+│   ├── classify.py                      ← POST /classify (text-only)
+│   └── jobs.py                          ← GET /jobs/{id} + GET /jobs (status polling)
+│
+├── services/
+│   ├── document_processor.py            ← Central orchestrator (features + progress)
+│   └── minio_client.py                  ← MinIO object storage client
+│
+├── workers/
+│   ├── celery_app.py                    ← Celery + Redis configuration
+│   └── document_tasks.py               ← Background processing task (lazy model loading)
+│
+├── database/
+│   ├── __init__.py                      ← Package exports (Base, Job, session helpers)
+│   ├── base.py                          ← SQLAlchemy declarative base + create_tables()
+│   ├── session.py                       ← PostgreSQL session factory (pool_size=5)
+│   └── models.py                        ← Job model (status, step, result, audit timestamps)
+│
+├── schemas/
+│   ├── upload.py                        ← UploadResponseSchema, UploadAcceptedSchema, QualitySchema
+│   ├── classify.py                      ← ClassifyRequest, ClassifyResponse, ClassificationSchema
+│   └── jobs.py                          ← JobStatusResponse, JobListResponse
+│
+├── document_parsing/
+│   └── pdf_parser.py                    ← PDF → page images (pypdfium2, 75 DPI)
+│
+├── preprocessing/
+│   ├── blur.py                          ← Multi-region Laplacian blur detection + sharpening
+│   └── utils.py                         ← Image loading utilities (EXIF-aware)
+│
+├── ocr/
+│   ├── engine.py                        ← PaddleOCR 3.5 wrapper (CPU, English)
+│   ├── parser.py                        ← Raw OCRResult → structured blocks
+│   ├── formatter.py                     ← Blocks → full text output
+│   └── visualizer.py                    ← OCR bounding box visualization
+│
+├── classification/
+│   ├── classifier.py                    ← Weighted keyword scoring engine
+│   ├── document_rules.py                ← 5 document type rule configs
+│   └── result.py                        ← ClassificationResult dataclass
+│
+├── stamp_detection/
+│   ├── __init__.py                      ← Package exports (StampDetector, utils, etc.)
+│   ├── detector.py                      ← YOLO orchestrator (StampDetector)
+│   ├── estamp_classifier.py             ← E-stamp classifier (blur-aware OCR + scoring)
+│   ├── anomaly_detector.py              ← Per-crop quality checks (faded/contrast/blur)
+│   ├── qr_processor.py                  ← OpenCV QR detection & decoding
+│   └── utils.py                         ← Cropping, ink check, visualization, overlap
+│
+├── address_verification/
+│   ├── extractor.py                     ← Regex address extraction from OCR
+│   ├── normalizer.py                    ← Abbreviation expansion
+│   ├── matcher.py                       ← Fuzzy + containment matching
+│   ├── freshness.py                     ← Document age validation
+│   └── validator.py                     ← Full verification orchestrator
+│
+├── validation/
+│   ├── validators.py                    ← Aadhaar, PAN, Passport, IFSC validators
+│   └── proof_check.py                   ← Cross-doc verification → PASS/REVIEW/REJECT
+│
+├── pipelines/
+│   ├── ocr_pipeline.py                  ← OCR orchestration
+│   ├── classification_pipeline.py       ← Classification orchestration
+│   └── stamp_detection_pipeline.py      ← Stamp detection orchestration
+│
+├── models/
+│   ├── best.pt                          ← YOLO stamp/signature detection model (~22 MB)
+│   ├── sign_detect/                     ← Alternative signature models
+│   ├── document.py                      ← ORM model (placeholder)
+│   ├── submission.py                    ← ORM model (placeholder)
+│   └── extraction_result.py             ← ORM model (placeholder)
+│
+├── storage/                             ← Storage abstraction layer (placeholder)
+└── utils/                               ← Shared utility functions (placeholder)
+
+scripts/
+└── run_document_pipeline.py             ← CLI pipeline runner (no Celery/Redis needed)
+tests/
+├── api/                                 ← API endpoint tests
+├── classification/                      ← Classification tests
+├── ocr/                                 ← OCR tests
+├── pipelines/                           ← Pipeline integration tests
+├── preprocessing/                       ← Preprocessing tests
+├── stamp_detection/                     ← Stamp detection tests
+├── test_document_verification.py        ← Cross-document verification tests
+├── test_pdf_processing.py               ← PDF processing tests
+├── test_validation.py                   ← Field validation tests
+└── debug_pipeline.py                    ← Pipeline debugging script
+>>>>>>> 07eb263e492d3dfeadd231b7bc3a77f94edacd44
 ```
 
 ### Step 1: Client Uploads File
@@ -625,6 +754,7 @@ graph TB
 
 ### Output JSON
 
+<<<<<<< HEAD
 ```json
 {
   "status": "REVIEW",
@@ -638,13 +768,244 @@ graph TB
   "dob_check": {"consistent": true, "mismatches": []},
   "address_check": {"consistent": true, "issues": []}
 }
+=======
+## Data Flow: Complete Request → Response
+
+### Async Upload (Default)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI /upload
+    participant Disk as Temp File
+    participant DB as PostgreSQL
+    participant RD as Redis Queue
+    participant W as Celery Worker
+    participant DP as DocumentProcessor
+
+    C->>API: POST /upload (file + features)
+    API->>Disk: Stream file in 1 MB chunks
+    API->>DB: INSERT Job (status=queued)
+    API->>RD: Dispatch process_document_task
+    API-->>C: { job_id, status: "queued", poll_url }
+
+    Note over C: Client is free — no waiting
+
+    RD->>W: Pick up task
+    W->>DB: UPDATE status=processing, step=INITIALIZING
+    W->>DP: process_document(file_path, features, progress_callback)
+
+    loop Each pipeline stage
+        DP->>W: progress_callback(stage)
+        W->>DB: UPDATE step=stage
+    end
+
+    DP-->>W: Processing result dict
+    W->>DB: UPDATE status=completed, result={...}
+    W->>Disk: DELETE temp file
+
+    C->>API: GET /jobs/{job_id}
+    API->>DB: SELECT * FROM jobs WHERE id=job_id
+    API-->>C: { status: "completed", result: {...} }
+```
+
+### Sync Upload (?sync=true)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI /upload?sync=true
+    participant DP as DocumentProcessor
+    participant PRE as Preprocessor
+    participant OCR as OCRPipeline
+    participant CLS as Classifier
+    participant STM as StampDetector
+    participant MIO as MinIO
+
+    C->>API: POST /upload?sync=true (file bytes)
+    Note over API: Stream file to disk
+
+    API->>DP: process_document(file_path, features)
+
+    DP->>PRE: load_image() + detect_blur()
+    PRE-->>DP: quality_info + preprocessed
+
+    opt MinIO enabled
+        DP->>MIO: Save original + preprocessed
+    end
+
+    DP->>OCR: run(image)
+    OCR-->>DP: {text, blocks, bboxes}
+
+    DP->>CLS: run(parsed_blocks)
+    CLS-->>DP: {doc_type, confidence, fields}
+
+    opt stamp/signature features requested
+        DP->>STM: process(image, ocr_text)
+        Note over STM: YOLO + E-Stamp + QR + Anomaly
+        STM-->>DP: {stamps, signatures, estamp_info}
+    end
+
+    DP-->>API: Complete result dict
+    API-->>C: Full JSON response (blocking)
+>>>>>>> 07eb263e492d3dfeadd231b7bc3a77f94edacd44
 ```
 
 ---
 
 ## Combined Final Verdict
 
+<<<<<<< HEAD
 All 4 features combine to produce one final assessment:
+=======
+```mermaid
+graph TB
+    DP["DocumentProcessor"] --> OE["OCREngine<br/>(Single Instance)"]
+    
+    OE --> OP["OCRPipeline<br/>Main text extraction"]
+    OE --> SP["StampDetectionPipeline<br/>E-stamp text analysis"]
+    
+    Note["⚡ PaddleOCR loaded ONCE<br/>Shared across pipelines<br/>Saves ~500MB memory"]
+
+    style OE fill:#e94560,color:#fff,stroke:none,stroke-width:2px
+    style Note fill:#2d3436,color:#dfe6e9,stroke:none
+```
+
+---
+
+## Storage Architecture (MinIO)
+
+```
+documents/                          ← Bucket
+└── {uuid}/                         ← Per-document folder
+    ├── original/
+    │   └── aadhaar_front.jpg       ← Uploaded file as-is
+    └── preprocessed/
+        └── aadhaar_front_preprocessed.png  ← After sharpening
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **API** | FastAPI 0.136.1 | REST endpoints, streaming uploads |
+| **Validation** | Pydantic v2 | Request/response schema validation |
+| **Task Queue** | Celery 5.6.3 + Redis 7.4.0 | Background document processing |
+| **Database** | PostgreSQL + SQLAlchemy 2.0 | Job tracking, audit, result persistence |
+| **OCR** | PaddleOCR 3.5 | Text extraction from images |
+| **Object Detection** | YOLOv8 (Ultralytics 8.3) | Stamp & signature localization |
+| **Deep Learning** | PyTorch 2.12 + Torchvision | YOLO model runtime |
+| **PDF Parsing** | pypdfium2 | PDF page rendering |
+| **QR Code** | OpenCV | QR detection & decoding |
+| **Image Processing** | OpenCV + NumPy + Pillow | Blur detection, sharpening, cropping, ink analysis |
+| **Object Storage** | MinIO | Original + preprocessed document images |
+| **Field Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |
+| **HTTP Client** | Requests | E-stamp authority verification (optional) |
+
+---
+
+## Program Execution Flow — Stamp Detection
+
+Below is the step-by-step program execution flow specifically for the stamp detection system when processing a document via the API or test scripts:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Client / Test Script
+    participant API as upload.py (POST /upload)
+    participant DP as DocumentProcessor
+    participant PDF as PDFParser (pypdfium2)
+    participant PRE as Preprocessor (OpenCV)
+    participant OCR as OCRPipeline (PaddleOCR)
+    participant CLS as ClassificationPipeline
+    participant SDP as StampDetectionPipeline
+    participant DET as StampDetector (YOLOv8)
+    participant ESC as EStampClassifier
+    participant QR as QRProcessor
+
+    Client->>API: Upload File (Image/PDF bytes)
+    API->>DP: process_from_bytes(file_bytes, filename)
+    Note over DP: Write bytes to temporary file
+
+    alt File is PDF
+        DP->>PDF: parse(pdf_path)
+        PDF-->>DP: Rendered Page PNGs
+        Note over DP: Loop through each page
+    end
+
+    DP->>PRE: Preprocessing (Grayscale + Laplacian Blur Check)
+    PRE-->>DP: Preprocessed Image (Sharpened if blurry)
+
+    DP->>OCR: Run OCR (PaddleOCR)
+    OCR-->>DP: Extracted Text & Blocks
+
+    DP->>CLS: Run Document Classification
+    CLS-->>DP: Doc Type (Aadhaar/PAN/Passport...)
+
+    DP->>SDP: process(image, ocr_text)
+    
+    rect rgb(26, 32, 53)
+        note right of SDP: Stamp Detection Flow (Independent)
+        SDP->>DET: detect(image, ocr_text)
+        
+        DET->>DET: Run YOLOv8 Model (best.pt)
+        Note over DET: Detects physical 'stamps' and 'signatures'
+        
+        DET->>ESC: classify(image, ocr_text)
+        Note over ESC: Checks Certificate regex, state names, stamp duty
+        
+        ESC->>QR: Decode QR
+        QR-->>ESC: Decoded QR Data (matches certificate?)
+        ESC-->>DET: E-Stamp Score (>= 50 is e-stamp)
+        
+        DET->>DET: Run Anomaly Checks on crops (Faded / Contrast / Blur)
+        DET-->>SDP: Combined Stamp Detection Results
+    end
+
+    SDP-->>DP: Serializable JSON (stamps, signatures, anomalies, e-stamp details)
+    
+    alt File is PDF
+        Note over DP: Aggregate results across all pages
+    end
+
+    DP-->>API: Full Processing Result Dict
+    API-->>Client: Final JSON Response
+```
+
+### Flow Breakdown
+
+1. **Upload / Trigger:** The client sends the raw file bytes via `POST /upload` or triggers a local file-based script run.
+2. **Bytes Handoff:** `upload.py` reads raw bytes and forwards them to `DocumentProcessor.process_from_bytes()`.
+3. **Format Check:**
+   - **If PDF:** `PDFParser` renders pages as temporary PNGs. Each page is processed sequentially, and the final results are aggregated.
+   - **If Image:** OpenCV loads the image directly.
+4. **Image Preprocessing:** Checks for blur. If blurry, runs OpenCV sharpening (Unsharp Mask).
+5. **OCR & Document Classification:** PaddleOCR extracts text blocks, which the `ClassificationPipeline` scores to identify the document type.
+6. **Stamp Detection Core:**
+   - **YOLOv8** localizes physical stamps and signatures.
+   - **EStampClassifier** uses OCR regex rules and runs the **QRProcessor** (using OpenCV) to locate/decode QR codes. An e-stamp score >= 50 confirms it as an e-stamp.
+   - **Anomaly Detector** flags any physical detections that are faded, blurry, or low-contrast.
+7. **Aggregation & JSON Response:** Results are structured into a JSON response, removing non-serializable elements like numpy arrays, and returned to the client.
+
+---
+
+## Pipeline 6: Production Upload System (Async Processing)
+
+### Why Was This Built?
+
+The original `/upload` endpoint had 4 critical problems for real-world use:
+
+| Problem | What Happened | Why It's Bad |
+|---------|--------------|-------------|
+| **Full file in RAM** | `await file.read()` loaded entire file into memory | A 100 MB PDF = 100 MB RAM instantly gone. Multiple uploads = server crash. |
+| **Blocking event loop** | `processor.process_from_bytes()` ran synchronously | YOLO + PaddleOCR takes 30-300 seconds. During this time, NO other HTTP request could be served. |
+| **No file size limit** | Anyone could upload a 2 GB file | Server would run out of memory and crash. |
+| **No timeout handling** | 50-page PDF = 5+ minutes processing | HTTP request would timeout before results were ready. Client gets an error even though processing was working. |
+
+### Architecture: Before vs After
+>>>>>>> 07eb263e492d3dfeadd231b7bc3a77f94edacd44
 
 ```mermaid
 graph LR
