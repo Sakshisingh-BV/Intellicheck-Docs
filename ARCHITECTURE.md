@@ -9,9 +9,18 @@
 
 ```mermaid
 graph TB
-    subgraph "🌐 API Gateway"
-        A1["POST /upload<br/>File Upload + Full Processing"]
+    subgraph "🌐 API Gateway (FastAPI)"
+        A1["POST /upload<br/>Async Upload → job_id"]
+        A1S["POST /upload?sync=true<br/>Sync Processing"]
         A2["POST /classify<br/>Text-only Classification"]
+        A3["GET /jobs/{id}<br/>Poll Job Status"]
+        A4["GET /jobs<br/>List All Jobs"]
+        A5["GET /<br/>Health Check"]
+    end
+
+    subgraph "⚡ Background Processing"
+        RD[("Redis<br/>Message Queue")]
+        CW["Celery Worker<br/>━━━━━━━━━━━━━━━<br/>Lazy-loads models once<br/>Processes documents"]
     end
 
     subgraph "🧠 Orchestration Layer"
@@ -39,10 +48,17 @@ graph TB
 
     subgraph "💾 Storage"
         MIO["MinIO Object Store<br/>Original + Preprocessed"]
+        PG[("PostgreSQL<br/>Job Tracking + Audit")]
     end
 
-    A1 --> DP
+    A1 -->|"Stream to disk"| RD
+    A1 -->|"Create job row"| PG
+    A1S --> DP
     A2 --> CLS
+    A3 --> PG
+    A4 --> PG
+    RD --> CW --> DP
+    CW -->|"Update progress"| PG
     DP --> PDF --> PRE
     DP --> PRE
     PRE --> OCR --> CLS
@@ -52,6 +68,9 @@ graph TB
     PC --> AV
 
     style DP fill:#1a1a2e,stroke:#e94560,color:#fff,stroke-width:2px
+    style RD fill:#e94560,color:#fff,stroke:none
+    style PG fill:#0f3460,color:#fff,stroke:none
+    style CW fill:#16213e,stroke:#e94560,color:#fff
     style OCR fill:#16213e,stroke:#0f3460,color:#fff
     style CLS fill:#16213e,stroke:#0f3460,color:#fff
     style STM fill:#16213e,stroke:#0f3460,color:#fff
@@ -64,71 +83,100 @@ graph TB
 
 ```
 app/
+├── main.py                              ← FastAPI app factory, router registration
+│
 ├── core/
-│   └── config.py                    ← Centralized settings (limits, URLs, features)
+│   └── config.py                        ← Centralized settings (limits, URLs, features)
 │
 ├── routes/
-│   ├── upload.py                    ← POST /upload (streaming + async/sync)
-│   ├── classify.py                  ← POST /classify (text-only)
-│   └── jobs.py                      ← GET /jobs/{id} + GET /jobs (status polling)
+│   ├── upload.py                        ← POST /upload (streaming + async/sync)
+│   ├── classify.py                      ← POST /classify (text-only)
+│   └── jobs.py                          ← GET /jobs/{id} + GET /jobs (status polling)
 │
 ├── services/
-│   ├── document_processor.py        ← Central orchestrator (features + progress)
-│   └── minio_client.py              ← MinIO object storage client
+│   ├── document_processor.py            ← Central orchestrator (features + progress)
+│   └── minio_client.py                  ← MinIO object storage client
 │
 ├── workers/
-│   ├── celery_app.py                ← Celery + Redis configuration
-│   └── document_tasks.py            ← Background processing task
+│   ├── celery_app.py                    ← Celery + Redis configuration
+│   └── document_tasks.py               ← Background processing task (lazy model loading)
 │
 ├── database/
-│   ├── base.py                      ← SQLAlchemy declarative base
-│   ├── session.py                   ← PostgreSQL session factory
-│   └── models.py                    ← Job model (status, result, audit)
+│   ├── __init__.py                      ← Package exports (Base, Job, session helpers)
+│   ├── base.py                          ← SQLAlchemy declarative base + create_tables()
+│   ├── session.py                       ← PostgreSQL session factory (pool_size=5)
+│   └── models.py                        ← Job model (status, step, result, audit timestamps)
 │
 ├── schemas/
-│   ├── upload.py                    ← Upload request/response schemas
-│   ├── classify.py                  ← Classification schemas
-│   └── jobs.py                      ← Job status schemas
+│   ├── upload.py                        ← UploadResponseSchema, UploadAcceptedSchema, QualitySchema
+│   ├── classify.py                      ← ClassifyRequest, ClassifyResponse, ClassificationSchema
+│   └── jobs.py                          ← JobStatusResponse, JobListResponse
 │
 ├── document_parsing/
-│   └── pdf_parser.py                ← PDF → page images (pypdfium2)
+│   └── pdf_parser.py                    ← PDF → page images (pypdfium2, 75 DPI)
 │
 ├── preprocessing/
-│   ├── blur.py                      ← Multi-region Laplacian blur detection
-│   └── utils.py                     ← Image loading utilities
+│   ├── blur.py                          ← Multi-region Laplacian blur detection + sharpening
+│   └── utils.py                         ← Image loading utilities (EXIF-aware)
 │
 ├── ocr/
-│   ├── engine.py                    ← PaddleOCR 3.5 wrapper
-│   ├── parser.py                    ← Raw result → structured blocks
-│   └── formatter.py                 ← Blocks → full text output
+│   ├── engine.py                        ← PaddleOCR 3.5 wrapper (CPU, English)
+│   ├── parser.py                        ← Raw OCRResult → structured blocks
+│   ├── formatter.py                     ← Blocks → full text output
+│   └── visualizer.py                    ← OCR bounding box visualization
 │
 ├── classification/
-│   ├── classifier.py                ← Weighted keyword scoring engine
-│   ├── document_rules.py            ← 5 document type rule configs
-│   └── result.py                    ← ClassificationResult dataclass
+│   ├── classifier.py                    ← Weighted keyword scoring engine
+│   ├── document_rules.py                ← 5 document type rule configs
+│   └── result.py                        ← ClassificationResult dataclass
 │
 ├── stamp_detection/
-│   ├── detector.py                  ← YOLO orchestrator (StampDetector)
-│   ├── estamp_classifier.py         ← E-stamp document classifier
-│   ├── anomaly_detector.py          ← Crop quality checks
-│   ├── qr_processor.py             ← OpenCV QR decode & presence
-│   └── utils.py                     ← Cropping, ink check, visualization
+│   ├── __init__.py                      ← Package exports (StampDetector, utils, etc.)
+│   ├── detector.py                      ← YOLO orchestrator (StampDetector)
+│   ├── estamp_classifier.py             ← E-stamp classifier (blur-aware OCR + scoring)
+│   ├── anomaly_detector.py              ← Per-crop quality checks (faded/contrast/blur)
+│   ├── qr_processor.py                  ← OpenCV QR detection & decoding
+│   └── utils.py                         ← Cropping, ink check, visualization, overlap
 │
 ├── address_verification/
-│   ├── extractor.py                 ← Regex address extraction from OCR
-│   ├── normalizer.py                ← Abbreviation expansion
-│   ├── matcher.py                   ← Fuzzy + containment matching
-│   ├── freshness.py                 ← Document age validation
-│   └── validator.py                 ← Full verification orchestrator
+│   ├── extractor.py                     ← Regex address extraction from OCR
+│   ├── normalizer.py                    ← Abbreviation expansion
+│   ├── matcher.py                       ← Fuzzy + containment matching
+│   ├── freshness.py                     ← Document age validation
+│   └── validator.py                     ← Full verification orchestrator
 │
 ├── validation/
-│   ├── validators.py                ← Aadhaar, PAN, Passport, IFSC validators
-│   └── proof_check.py              ← Cross-doc verification → PASS/REVIEW/REJECT
+│   ├── validators.py                    ← Aadhaar, PAN, Passport, IFSC validators
+│   └── proof_check.py                   ← Cross-doc verification → PASS/REVIEW/REJECT
 │
-└── pipelines/
-    ├── ocr_pipeline.py              ← OCR orchestration
-    ├── classification_pipeline.py   ← Classification orchestration
-    └── stamp_detection_pipeline.py  ← Stamp detection orchestration
+├── pipelines/
+│   ├── ocr_pipeline.py                  ← OCR orchestration
+│   ├── classification_pipeline.py       ← Classification orchestration
+│   └── stamp_detection_pipeline.py      ← Stamp detection orchestration
+│
+├── models/
+│   ├── best.pt                          ← YOLO stamp/signature detection model (~22 MB)
+│   ├── sign_detect/                     ← Alternative signature models
+│   ├── document.py                      ← ORM model (placeholder)
+│   ├── submission.py                    ← ORM model (placeholder)
+│   └── extraction_result.py             ← ORM model (placeholder)
+│
+├── storage/                             ← Storage abstraction layer (placeholder)
+└── utils/                               ← Shared utility functions (placeholder)
+
+scripts/
+└── run_document_pipeline.py             ← CLI pipeline runner (no Celery/Redis needed)
+tests/
+├── api/                                 ← API endpoint tests
+├── classification/                      ← Classification tests
+├── ocr/                                 ← OCR tests
+├── pipelines/                           ← Pipeline integration tests
+├── preprocessing/                       ← Preprocessing tests
+├── stamp_detection/                     ← Stamp detection tests
+├── test_document_verification.py        ← Cross-document verification tests
+├── test_pdf_processing.py               ← PDF processing tests
+├── test_validation.py                   ← Field validation tests
+└── debug_pipeline.py                    ← Pipeline debugging script
 ```
 
 ---
@@ -519,28 +567,61 @@ graph LR
 
 ## Data Flow: Complete Request → Response
 
+### Async Upload (Default)
+
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant API as FastAPI /upload
+    participant Disk as Temp File
+    participant DB as PostgreSQL
+    participant RD as Redis Queue
+    participant W as Celery Worker
     participant DP as DocumentProcessor
-    participant PDF as PDFParser
+
+    C->>API: POST /upload (file + features)
+    API->>Disk: Stream file in 1 MB chunks
+    API->>DB: INSERT Job (status=queued)
+    API->>RD: Dispatch process_document_task
+    API-->>C: { job_id, status: "queued", poll_url }
+
+    Note over C: Client is free — no waiting
+
+    RD->>W: Pick up task
+    W->>DB: UPDATE status=processing, step=INITIALIZING
+    W->>DP: process_document(file_path, features, progress_callback)
+
+    loop Each pipeline stage
+        DP->>W: progress_callback(stage)
+        W->>DB: UPDATE step=stage
+    end
+
+    DP-->>W: Processing result dict
+    W->>DB: UPDATE status=completed, result={...}
+    W->>Disk: DELETE temp file
+
+    C->>API: GET /jobs/{job_id}
+    API->>DB: SELECT * FROM jobs WHERE id=job_id
+    API-->>C: { status: "completed", result: {...} }
+```
+
+### Sync Upload (?sync=true)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI /upload?sync=true
+    participant DP as DocumentProcessor
     participant PRE as Preprocessor
     participant OCR as OCRPipeline
     participant CLS as Classifier
     participant STM as StampDetector
     participant MIO as MinIO
 
-    C->>API: POST /upload (file bytes)
-    API->>DP: process_from_bytes(bytes, filename)
-    
-    Note over DP: Write to temp file
-    
-    alt PDF file
-        DP->>PDF: parse(pdf_path)
-        PDF-->>DP: [page1.png, page2.png, ...]
-        Note over DP: Process each page independently
-    end
+    C->>API: POST /upload?sync=true (file bytes)
+    Note over API: Stream file to disk
+
+    API->>DP: process_document(file_path, features)
 
     DP->>PRE: load_image() + detect_blur()
     PRE-->>DP: quality_info + preprocessed
@@ -555,12 +636,14 @@ sequenceDiagram
     DP->>CLS: run(parsed_blocks)
     CLS-->>DP: {doc_type, confidence, fields}
 
-    DP->>STM: process(image, ocr_text)
-    Note over STM: YOLO + E-Stamp + QR + Anomaly
-    STM-->>DP: {stamps, signatures, estamp_info}
+    opt stamp/signature features requested
+        DP->>STM: process(image, ocr_text)
+        Note over STM: YOLO + E-Stamp + QR + Anomaly
+        STM-->>DP: {stamps, signatures, estamp_info}
+    end
 
     DP-->>API: Complete result dict
-    API-->>C: JSON response
+    API-->>C: Full JSON response (blocking)
 ```
 
 ---
@@ -599,16 +682,19 @@ documents/                          ← Bucket
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **API** | FastAPI | REST endpoints |
-| **Task Queue** | Celery + Redis | Background processing for large files |
-| **Database** | PostgreSQL + SQLAlchemy | Job tracking, audit, result storage |
+| **API** | FastAPI 0.136.1 | REST endpoints, streaming uploads |
+| **Validation** | Pydantic v2 | Request/response schema validation |
+| **Task Queue** | Celery 5.6.3 + Redis 7.4.0 | Background document processing |
+| **Database** | PostgreSQL + SQLAlchemy 2.0 | Job tracking, audit, result persistence |
 | **OCR** | PaddleOCR 3.5 | Text extraction from images |
-| **Object Detection** | YOLOv8 (Ultralytics) | Stamp & signature localization |
+| **Object Detection** | YOLOv8 (Ultralytics 8.3) | Stamp & signature localization |
+| **Deep Learning** | PyTorch 2.12 + Torchvision | YOLO model runtime |
 | **PDF Parsing** | pypdfium2 | PDF page rendering |
 | **QR Code** | OpenCV | QR detection & decoding |
-| **Image Processing** | OpenCV | Blur detection, sharpening, cropping |
+| **Image Processing** | OpenCV + NumPy + Pillow | Blur detection, sharpening, cropping, ink analysis |
 | **Object Storage** | MinIO | Original + preprocessed document images |
-| **Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |
+| **Field Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |
+| **HTTP Client** | Requests | E-stamp authority verification (optional) |
 
 ---
 
