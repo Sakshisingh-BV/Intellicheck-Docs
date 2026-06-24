@@ -3,9 +3,9 @@
 Complete document intelligence pipeline runner.
 
 Usage:
-    python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/estamp2_result.json
-    python scripts/run_document_pipeline.py sample.webp --output output/result.json
-    python scripts/run_document_pipeline.py sample.webp --output output/result.json --minio
+    python scripts/run_document_pipeline.py data/estamp2.pdf
+    python scripts/run_document_pipeline.py data/sample.webp
+    python scripts/run_document_pipeline.py data/sample.webp -o data/test_outputs/custom_result.json
 
 Pipeline:
     Input (PDF/Image) → Preprocessing → OCR → Classification → Stamp Detection → JSON + Visualizations
@@ -16,9 +16,9 @@ Features:
     - OCR with parser and formatter
     - Document classification
     - Stamp / signature / QR detection with bounding boxes
-    - Optional MinIO integration
     - JSON output to console and file
     - Bounding-box visualization images saved alongside JSON
+    - Default output directory: data/test_outputs/
 """
 
 import sys
@@ -38,12 +38,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Default output directory
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data" / "test_outputs"
+
 
 def run_pipeline(
     input_path: str,
     output_path: str = None,
-    use_minio: bool = True,
-    save_to_minio: bool = True
 ) -> dict:
     """
     Run complete document pipeline.
@@ -51,8 +52,7 @@ def run_pipeline(
     Args:
         input_path: Path to input image or PDF file.
         output_path: Optional path to save JSON output.
-        use_minio: If True, initialize MinIO integration (default: True).
-        save_to_minio: If True, save intermediate results to MinIO (default: True).
+                     Defaults to data/test_outputs/<input_filename>_result.json.
 
     Returns:
         Processing result dict with status, OCR, classification, stamp detection, etc.
@@ -67,20 +67,22 @@ def run_pipeline(
             "filename": str(input_path)
         }
 
+    # Default output path: data/test_outputs/<filename>_result.json
+    if output_path is None:
+        DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = str(DEFAULT_OUTPUT_DIR / f"{input_path.stem}_result.json")
+
     # Derive output directory from output path for saving visualizations
-    output_dir = None
-    if output_path:
-        output_dir = str(Path(output_path).parent)
+    output_dir = str(Path(output_path).parent)
 
     logger.info(f"Starting pipeline for {input_path}")
 
     try:
-        processor = DocumentProcessor(use_minio=use_minio)
+        processor = DocumentProcessor()
 
         # Process document
         result = processor.process_document(
             str(input_path),
-            save_minio=save_to_minio and use_minio,
             output_dir=output_dir,
         )
 
@@ -92,12 +94,11 @@ def run_pipeline(
         print("=" * 80 + "\n")
 
         # Save to file
-        if output_path:
-            output_file = Path(output_path)
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_file, 'w') as f:
-                json.dump(result, f, indent=2, default=str)
-            logger.info(f"Saved result to {output_file}")
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w') as f:
+            json.dump(result, f, indent=2, default=str)
+        logger.info(f"Saved result to {output_file}")
 
         return result
 
@@ -118,9 +119,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio --output data/test_outputs/estamp2_result.json
-  python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json
-  python scripts/run_document_pipeline.py data/sample.webp --output data/test_outputs/sample_result.json --no-minio
+  python scripts/run_document_pipeline.py data/estamp2.pdf
+  python scripts/run_document_pipeline.py data/sample.webp
+  python scripts/run_document_pipeline.py data/sample.webp -o data/test_outputs/custom_result.json
         """
     )
     parser.add_argument(
@@ -129,14 +130,9 @@ Examples:
     )
     parser.add_argument(
         "-o", "--output",
-        help="Output JSON file path. Bounding-box visualizations are saved in the same directory.",
+        help="Output JSON file path (default: data/test_outputs/<filename>_result.json). "
+             "Bounding-box visualizations are saved in the same directory.",
         default=None
-    )
-    parser.add_argument(
-        "--no-minio",
-        help="Disable MinIO integration (default: enabled)",
-        action="store_true",
-        default=False
     )
 
     args = parser.parse_args()
@@ -144,8 +140,6 @@ Examples:
     result = run_pipeline(
         args.input,
         args.output,
-        use_minio=not args.no_minio,
-        save_to_minio=not args.no_minio
     )
 
     return 0 if result.get("status") == "completed" else 1

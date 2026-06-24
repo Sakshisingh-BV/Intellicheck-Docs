@@ -9,18 +9,8 @@
 
 ```mermaid
 graph TB
-    subgraph APIGatewayFastAPI
-        A1["POST /upload\nAsync Upload → job_id"]
-        A1S["POST /upload?sync=true\nSync Processing"]
-        A2["POST /classify\nText-only Classification"]
-        A3["GET /jobs/{id}\nPoll Job Status"]
-        A4["GET /jobs\nList All Jobs"]
-        A5["GET /\nHealth Check"]
-    end
-
-    subgraph BackgroundProcessing
-        RD[("Redis\nMessage Queue")]
-        CW["Celery Worker\n━━━━━━━━━━━━━━━\nLazy-loads models once\nProcesses documents"]
+    subgraph CLIEntryPoint
+        CLI["scripts/run_document_pipeline.py\n━━━━━━━━━━━━━━━\nInput: data/ folder\nOutput: data/test_outputs/"]
     end
 
     subgraph OrchestrationLayer
@@ -46,35 +36,29 @@ graph TB
         PC["Proof Check\nCross-Document\nPASS / REVIEW / REJECT"]
     end
 
-    subgraph Storage
-        MIO["MinIO Object Store\nOriginal + Preprocessed"]
-        PG[("PostgreSQL\nJob Tracking + Audit")]
+    subgraph Output
+        JSON["📋 JSON Result File\ndata/test_outputs/"]
+        VIZ["🖼️ Detection Visualizations\nBounding Box PNGs"]
     end
 
-    A1 -->|"Stream to disk"| RD
-    A1 -->|"Create job row"| PG
-    A1S --> DP
-    A2 --> CLS
-    A3 --> PG
-    A4 --> PG
-    RD --> CW --> DP
-    CW -->|"Update progress"| PG
+    CLI --> DP
     DP --> PDF --> PRE
     DP --> PRE
     PRE --> OCR --> CLS
     DP --> STM
-    DP --> MIO
     PC --> FV
     PC --> AV
+    DP --> JSON
+    DP --> VIZ
 
     style DP fill:#1a1a2e,stroke:#e94560,color:#fff,stroke-width:2px
-    style RD fill:#e94560,color:#fff,stroke:none
-    style PG fill:#0f3460,color:#fff,stroke:none
-    style CW fill:#16213e,stroke:#e94560,color:#fff
+    style CLI fill:#e94560,color:#fff,stroke:none
     style OCR fill:#16213e,stroke:#0f3460,color:#fff
     style CLS fill:#16213e,stroke:#0f3460,color:#fff
     style STM fill:#16213e,stroke:#0f3460,color:#fff
     style PC fill:#0f3460,stroke:#e94560,color:#fff,stroke-width:2px
+    style JSON fill:#0f3460,color:#fff,stroke:none
+    style VIZ fill:#0f3460,color:#fff,stroke:none
 ```
 
 ---
@@ -83,34 +67,11 @@ graph TB
 
 ```text
 app/
-├── main.py                              ← FastAPI app factory, router registration
-│
 ├── core/
-│   └── config.py                        ← Centralized settings (limits, URLs, features)
-│
-├── routes/
-│   ├── upload.py                        ← POST /upload (streaming + async/sync)
-│   ├── classify.py                      ← POST /classify (text-only)
-│   └── jobs.py                          ← GET /jobs/{id} + GET /jobs (status polling)
+│   └── config.py                        ← Feature selection, progress stages
 │
 ├── services/
-│   ├── document_processor.py            ← Central orchestrator (features + progress)
-│   └── minio_client.py                  ← MinIO object storage client
-│
-├── workers/
-│   ├── celery_app.py                    ← Celery + Redis configuration
-│   └── document_tasks.py               ← Background processing task (lazy model loading)
-│
-├── database/
-│   ├── __init__.py                      ← Package exports (Base, Job, session helpers)
-│   ├── base.py                          ← SQLAlchemy declarative base + create_tables()
-│   ├── session.py                       ← PostgreSQL session factory (pool_size=5)
-│   └── models.py                        ← Job model (status, step, result, audit timestamps)
-│
-├── schemas/
-│   ├── upload.py                        ← UploadResponseSchema, UploadAcceptedSchema, QualitySchema
-│   ├── classify.py                      ← ClassifyRequest, ClassifyResponse, ClassificationSchema
-│   └── jobs.py                          ← JobStatusResponse, JobListResponse
+│   └── document_processor.py            ← Central orchestrator (features + progress)
 │
 ├── document_parsing/
 │   └── pdf_parser.py                    ← PDF → page images (pypdfium2, 75 DPI)
@@ -156,16 +117,13 @@ app/
 │
 ├── models/
 │   ├── best.pt                          ← YOLO stamp/signature detection model (~22 MB)
-│   ├── sign_detect/                     ← Alternative signature models
-│   ├── document.py                      ← ORM model (placeholder)
-│   ├── submission.py                    ← ORM model (placeholder)
-│   └── extraction_result.py             ← ORM model (placeholder)
+│   └── sign_detect/                     ← Alternative signature models
 │
 ├── storage/                             ← Storage abstraction layer (placeholder)
 └── utils/                               ← Shared utility functions (placeholder)
 
 scripts/
-└── run_document_pipeline.py             ← CLI pipeline runner (no Celery/Redis needed)
+└── run_document_pipeline.py             ← CLI entry point (main program)
 tests/
 ├── api/                                 ← API endpoint tests
 ├── classification/                      ← Classification tests
@@ -186,7 +144,7 @@ tests/
 ```mermaid
 graph LR
     subgraph INPUT
-        UP["📁 File Upload\n(Image or PDF)"]
+        UP["📁 File Path\n(Image or PDF)"]
     end
 
     subgraph PARSE
@@ -209,12 +167,8 @@ graph LR
         ST["Stamp Detection\nYOLO + E-Stamp"]
     end
 
-    subgraph STORE
-        MI["MinIO\nSave originals"]
-    end
-
     subgraph OUTPUT
-        RES["📋 JSON Response"]
+        RES["📋 JSON Result\ndata/test_outputs/"]
     end
 
     UP --> R
@@ -225,7 +179,6 @@ graph LR
     BL -->|Sharp| OCR
     OCR --> CL --> RES
     OCR --> ST --> RES
-    IMG --> MI
 
     style UP fill:#e94560,color:#fff,stroke:none
     style RES fill:#0f3460,color:#fff,stroke:none
@@ -565,70 +518,24 @@ graph LR
 
 ---
 
-## Data Flow: Complete Request → Response
-
-### Async Upload (Default)
+## Data Flow: Input → Output
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant API as FastAPI /upload
-    participant Disk as Temp File
-    participant DB as PostgreSQL
-    participant RD as Redis Queue
-    participant W as Celery Worker
-    participant DP as DocumentProcessor
-
-    C->>API: POST /upload (file + features)
-    API->>Disk: Stream file in 1 MB chunks
-    API->>DB: INSERT Job (status=queued)
-    API->>RD: Dispatch process_document_task
-    API-->>C: { job_id, status: "queued", poll_url }
-
-    Note over C: Client is free — no waiting
-
-    RD->>W: Pick up task
-    W->>DB: UPDATE status=processing, step=INITIALIZING
-    W->>DP: process_document(file_path, features, progress_callback)
-
-    loop Each pipeline stage
-        DP->>W: progress_callback(stage)
-        W->>DB: UPDATE step=stage
-    end
-
-    DP-->>W: Processing result dict
-    W->>DB: UPDATE status=completed, result={...}
-    W->>Disk: DELETE temp file
-
-    C->>API: GET /jobs/{job_id}
-    API->>DB: SELECT * FROM jobs WHERE id=job_id
-    API-->>C: { status: "completed", result: {...} }
-```
-
-### Sync Upload (?sync=true)
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant API as FastAPI /upload?sync=true
+    participant User as User
+    participant CLI as run_document_pipeline.py
     participant DP as DocumentProcessor
     participant PRE as Preprocessor
     participant OCR as OCRPipeline
     participant CLS as Classifier
     participant STM as StampDetector
-    participant MIO as MinIO
 
-    C->>API: POST /upload?sync=true (file bytes)
-    Note over API: Stream file to disk
+    User->>CLI: python scripts/run_document_pipeline.py data/sample.webp
 
-    API->>DP: process_document(file_path, features)
+    CLI->>DP: process_document(file_path)
 
     DP->>PRE: load_image() + detect_blur()
     PRE-->>DP: quality_info + preprocessed
-
-    opt MinIO enabled
-        DP->>MIO: Save original + preprocessed
-    end
 
     DP->>OCR: run(image)
     OCR-->>DP: {text, blocks, bboxes}
@@ -636,14 +543,16 @@ sequenceDiagram
     DP->>CLS: run(parsed_blocks)
     CLS-->>DP: {doc_type, confidence, fields}
 
-    opt stamp/signature features requested
+    opt stamp/signature features enabled
         DP->>STM: process(image, ocr_text)
         Note over STM: YOLO + E-Stamp + QR + Anomaly
         STM-->>DP: {stamps, signatures, estamp_info}
     end
 
-    DP-->>API: Complete result dict
-    API-->>C: Full JSON response (blocking)
+    DP-->>CLI: Complete result dict
+    CLI->>CLI: Save JSON to data/test_outputs/
+    CLI->>CLI: Save visualization PNGs
+    CLI-->>User: Print result to console
 ```
 
 ---
@@ -665,34 +574,16 @@ graph TB
 
 ---
 
-## Storage Architecture (MinIO)
-
-```text
-documents/                          ← Bucket
-└── {uuid}/                         ← Per-document folder
-    ├── original/
-    │   └── aadhaar_front.jpg       ← Uploaded file as-is
-    └── preprocessed/
-        └── aadhaar_front_preprocessed.png  ← After sharpening
-```
-
----
-
 ## Technology Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **API** | FastAPI 0.136.1 | REST endpoints, streaming uploads |
-| **Validation** | Pydantic v2 | Request/response schema validation |
-| **Task Queue** | Celery 5.6.3 + Redis 7.4.0 | Background document processing |
-| **Database** | PostgreSQL + SQLAlchemy 2.0 | Job tracking, audit, result persistence |
 | **OCR** | PaddleOCR 3.5 | Text extraction from images |
 | **Object Detection** | YOLOv8 (Ultralytics 8.3) | Stamp & signature localization |
 | **Deep Learning** | PyTorch 2.12 + Torchvision | YOLO model runtime |
 | **PDF Parsing** | pypdfium2 | PDF page rendering |
 | **QR Code** | OpenCV | QR detection & decoding |
 | **Image Processing** | OpenCV + NumPy + Pillow | Blur detection, sharpening, cropping, ink analysis |
-| **Object Storage** | MinIO | Original + preprocessed document images |
 | **Field Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |
 | **HTTP Client** | Requests | E-stamp authority verification (optional) |
 
@@ -700,13 +591,13 @@ documents/                          ← Bucket
 
 ## Program Execution Flow — Stamp Detection
 
-Below is the step-by-step program execution flow specifically for the stamp detection system when processing a document via the API or test scripts:
+Below is the step-by-step program execution flow specifically for the stamp detection system when processing a document:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Client / Test Script
-    participant API as upload.py (POST /upload)
+    actor User as User
+    participant CLI as run_document_pipeline.py
     participant DP as DocumentProcessor
     participant PDF as PDFParser (pypdfium2)
     participant PRE as Preprocessor (OpenCV)
@@ -717,9 +608,8 @@ sequenceDiagram
     participant ESC as EStampClassifier
     participant QR as QRProcessor
 
-    Client->>API: Upload File (Image/PDF bytes)
-    API->>DP: process_from_bytes(file_bytes, filename)
-    Note over DP: Write bytes to temporary file
+    User->>CLI: python scripts/run_document_pipeline.py data/estamp2.pdf
+    CLI->>DP: process_document(file_path)
 
     alt File is PDF
         DP->>PDF: parse(pdf_path)
@@ -762,301 +652,36 @@ sequenceDiagram
         Note over DP: Aggregate results across all pages
     end
 
-    DP-->>API: Full Processing Result Dict
-    API-->>Client: Final JSON Response
+    DP-->>CLI: Full Processing Result Dict
+    CLI->>CLI: Save JSON + Visualization PNGs
+    CLI-->>User: Print result to console
 ```
 
 ### Flow Breakdown
 
-1. **Upload / Trigger:** The client sends the raw file bytes via `POST /upload` or triggers a local file-based script run.
-2. **Bytes Handoff:** `upload.py` reads raw bytes and forwards them to `DocumentProcessor.process_from_bytes()`.
-3. **Format Check:**
+1. **Input:** The user runs the CLI script with a file path from the `data/` folder.
+2. **Format Check:**
    - **If PDF:** `PDFParser` renders pages as temporary PNGs. Each page is processed sequentially, and the final results are aggregated.
    - **If Image:** OpenCV loads the image directly.
-4. **Image Preprocessing:** Checks for blur. If blurry, runs OpenCV sharpening (Unsharp Mask).
-5. **OCR & Document Classification:** PaddleOCR extracts text blocks, which the `ClassificationPipeline` scores to identify the document type.
-6. **Stamp Detection Core:**
+3. **Image Preprocessing:** Checks for blur. If blurry, runs OpenCV sharpening (Unsharp Mask).
+4. **OCR & Document Classification:** PaddleOCR extracts text blocks, which the `ClassificationPipeline` scores to identify the document type.
+5. **Stamp Detection Core:**
    - **YOLOv8** localizes physical stamps and signatures.
    - **EStampClassifier** uses OCR regex rules and runs the **QRProcessor** (using OpenCV) to locate/decode QR codes. An e-stamp score >= 50 confirms it as an e-stamp.
    - **Anomaly Detector** flags any physical detections that are faded, blurry, or low-contrast.
-7. **Aggregation & JSON Response:** Results are structured into a JSON response, removing non-serializable elements like numpy arrays, and returned to the client.
+6. **Output:** Results are saved as JSON to `data/test_outputs/` and visualization PNGs are saved alongside.
 
 ---
 
-## Pipeline 6: Production Upload System (Async Processing)
-
-### Why Was This Built?
-
-The original `/upload` endpoint had 4 critical problems for real-world use:
-
-| Problem | What Happened | Why It's Bad |
-|---------|--------------|-------------|
-| **Full file in RAM** | `await file.read()` loaded entire file into memory | A 100 MB PDF = 100 MB RAM instantly gone. Multiple uploads = server crash. |
-| **Blocking event loop** | `processor.process_from_bytes()` ran synchronously | YOLO + PaddleOCR takes 30-300 seconds. During this time, NO other HTTP request could be served. |
-| **No file size limit** | Anyone could upload a 2 GB file | Server would run out of memory and crash. |
-| **No timeout handling** | 50-page PDF = 5+ minutes processing | HTTP request would timeout before results were ready. Client gets an error even though processing was working. |
-
-### Architecture: Before vs After
-
-```mermaid
-graph LR
-    subgraph BEFOREBlocking
-        C1["Client"] -->|"POST /upload\n(waits 30-300 sec)"| API1["FastAPI\nfile.read() → RAM"]
-        API1 -->|"Blocks entire server"| DP1["DocumentProcessor"]
-        DP1 -->|"Response after processing"| C1
-    end
-```
-
-```mermaid
-graph TB
-    subgraph AFTERAsyncwithBackgroundWorkers
-        C2["Client"] -->|"POST /upload"| API2["FastAPI\nStream → Disk"]
-        API2 -->|"Instant response\njob_id + status=queued"| C2
-        API2 -->|"Create Job row"| PG[("PostgreSQL\njobs table")]
-        API2 -->|"Dispatch task"| RD[("Redis\nMessage Queue")]
-        RD --> W["Celery Worker\nLoads YOLO+PaddleOCR once\nProcesses documents"]
-        W -->|"Update progress\nPREPROCESSING → OCR → ..."| PG
-        W -->|"Save final result"| PG
-        C2 -->|"GET /jobs/{id}\nPoll for status"| PG
-    end
-
-    style PG fill:#0f3460,color:#fff,stroke:none
-    style RD fill:#e94560,color:#fff,stroke:none
-    style W fill:#16213e,stroke:#0f3460,color:#fff
-```
-
-### Upload Flow: Step by Step
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as FastAPI /upload
-    participant Disk as Temp File (data/uploads/)
-    participant DB as PostgreSQL (jobs table)
-    participant Redis as Redis Queue
-    participant Worker as Celery Worker
-    participant DP as DocumentProcessor
-
-    Client->>API: POST /upload (file + features)
-    
-    Note over API: Validate extension (.pdf, .jpg, etc.)
-    
-    API->>Disk: Stream file in 1 MB chunks
-    Note over API,Disk: Check size during streaming\nAbort at 100 MB limit
-    
-    API->>DB: INSERT Job (status=queued)
-    API->>Redis: Dispatch process_document_task
-    API-->>Client: { job_id, status: "queued", poll_url }
-    
-    Note over Client: Client is FREE — no waiting
-    
-    Redis->>Worker: Pick up task
-    Worker->>DB: UPDATE status=processing, step=INITIALIZING
-    Worker->>DP: process_document(file_path, features)
-    
-    loop Each processing stage
-        DP->>Worker: progress_callback("PREPROCESSING")
-        Worker->>DB: UPDATE step=PREPROCESSING
-        DP->>Worker: progress_callback("OCR")
-        Worker->>DB: UPDATE step=OCR
-        DP->>Worker: progress_callback("STAMP_DETECTION")
-        Worker->>DB: UPDATE step=STAMP_DETECTION
-    end
-    
-    DP-->>Worker: Processing result dict
-    Worker->>DB: UPDATE status=completed, result={...}
-    Worker->>Disk: DELETE temp file (try/finally cleanup)
-    
-    Client->>API: GET /jobs/{job_id}
-    API->>DB: SELECT * FROM jobs WHERE id=job_id
-    API-->>Client: { status: "completed", result: {...} }
-```
-
-### Design Decisions & Reasoning
-
-#### 1. Stream to Disk, Not RAM
-
-**What:** File is written to `data/uploads/` in 1 MB chunks during upload, never fully loaded into memory.
-
-**Why:** A 100 MB scanned PDF loaded via `await file.read()` would instantly consume 100 MB of server RAM. With 5 concurrent uploads, that's 500 MB just for file storage — before any processing starts. Streaming to disk means the server only ever holds 1 MB in memory per upload, regardless of file size.
-
-```python
-# OLD — entire file in RAM:
-file_data = await file.read()  # 100 MB PDF = 100 MB RAM
-
-# NEW — stream to disk in chunks:
-while True:
-    chunk = await file.read(1_048_576)  # 1 MB at a time
-    if not chunk:
-        break
-    if total_size > MAX_UPLOAD_SIZE_BYTES:  # Check DURING streaming
-        raise HTTPException(413, "File too large")
-    tmp.write(chunk)
-```
-
-#### 2. 100 MB File Size Limit
-
-**What:** Size is checked during streaming — if the file exceeds 100 MB, upload is aborted immediately (partial file deleted).
-
-**Why:** Without a limit, a malicious or accidental 2 GB upload would crash the server. The limit is checked **during** streaming, not after — so a 500 MB file is rejected after the first 100 MB, not after uploading all 500 MB.
-
-#### 3. Celery + Redis for Background Processing
-
-**What:** Upload returns instantly with a `job_id`. The actual processing happens in a separate Celery worker process.
-
-**Why:** Document processing (PaddleOCR + YOLOv8) takes 30-300 seconds. If this runs inside the FastAPI request handler:
-- The HTTP request blocks for the entire duration
-- No other requests can be processed (Python GIL + synchronous processing)
-- Client-side timeouts often kill the connection before processing finishes
-
-With Celery, the FastAPI server stays responsive — it just creates a job record and returns. The heavy ML processing happens in a separate worker process.
-
-#### 4. PostgreSQL for Job Storage (Not Just Redis)
-
-**What:** Job status, progress, and final results are stored in PostgreSQL. Redis is only used as the Celery message queue.
-
-**Why:**
-- **Audit trail:** PostgreSQL keeps a permanent record of every document processed — when, what type, what result. This is required for KYC compliance.
-- **Reliability:** Redis data can be lost on restart (it's in-memory). PostgreSQL persists to disk.
-- **Query capability:** `GET /jobs?status=failed&limit=10` — you can filter, paginate, and search job history. Redis is not designed for this.
-
-#### 5. Lazy Model Loading in Workers
-
-**What:** PaddleOCR and YOLOv8 are loaded **once** when the first task runs, not on every task.
-
-**Why:** Loading PaddleOCR takes ~5 seconds and uses ~500 MB RAM. Loading YOLOv8 takes ~2 seconds. If we loaded them per-task, every document would have a 7-second overhead. With lazy loading, the models are loaded once and reused for all subsequent tasks.
-
-```python
-_processor = None  # Module-level singleton
-
-def _get_processor(use_minio=False):
-    global _processor
-    if _processor is None:  # Only loads models on FIRST call
-        _processor = DocumentProcessor(use_minio=use_minio)
-    return _processor
-```
-
-#### 6. Feature Selection
-
-**What:** Clients can specify which analysis steps to run via `?features=stamp,address`.
-
-**Why:** Not every use case needs all checks. If you only need to verify an address, running YOLO stamp detection wastes 10+ seconds. Feature selection lets the client skip unnecessary steps:
-
-| Feature | What It Runs | Time Saved If Skipped |
-|---------|-------------|----------------------|
-| `stamp` | YOLOv8 + E-stamp classifier + anomaly detection | ~10-15 sec |
-| `signature` | Same YOLO pass as stamp (detects both) | ~10-15 sec |
-| `address` | Address extraction from OCR text | ~1 sec |
-| `idproof` | Field validation (Aadhaar checksum, PAN format) | ~0.5 sec |
-
-> OCR and Classification **always run** — they are required by all other features.
-
-#### 7. Progress Stages
-
-**What:** The worker reports its current stage to PostgreSQL as it processes:
-
-```
-INITIALIZING → PREPROCESSING → OCR → STAMP_DETECTION →
-SIGNATURE_DETECTION → ADDRESS_CHECK → ID_PROOF_CHECK → FINALIZING
-```
-
-**Why:** When processing a 50-page PDF (which can take 5+ minutes), the client needs to know if the job is still running or stuck. Without progress reporting, the client can only see "processing" and has no idea if it will take 10 more seconds or 5 more minutes.
-
-#### 8. `task_acks_late = True` + `task_reject_on_worker_lost = True`
-
-**What:** Celery only acknowledges a task AFTER it completes. If a worker crashes mid-processing, the task is automatically re-queued.
-
-**Why:** Without this, if a worker runs out of memory during YOLO inference and crashes, the task is marked as "acknowledged" (started) and never retried. The job would be stuck in "processing" forever. With late acknowledgment, crashed tasks are automatically picked up by another worker.
-
-#### 9. `worker_prefetch_multiplier = 1`
-
-**What:** Each Celery worker only grabs 1 task at a time from the queue.
-
-**Why:** Document processing is CPU/GPU-heavy. If a worker prefetches 4 tasks but can only process 1 at a time, the other 3 sit idle in that worker's local buffer — even if other workers are free. With `prefetch_multiplier=1`, tasks are distributed fairly across all available workers.
-
-#### 10. `?sync=true` Backward Compatibility
-
-**What:** Adding `?sync=true` to the upload request makes it behave like the old blocking API — processes immediately and returns the full result.
-
-**Why:** Existing test scripts and local development workflows rely on the immediate response. The sync mode preserves this behavior without requiring any changes to existing code.
-
-### API Endpoints (Updated)
-
-| Method | Path | Purpose |
-|--------|------|--------|
-| `POST` | `/upload` | Upload document → returns `job_id` (async) |
-| `POST` | `/upload?sync=true` | Upload document → returns result (blocking, for testing) |
-| `POST` | `/upload?features=stamp,address` | Upload with specific feature selection |
-| `GET` | `/jobs/{job_id}` | Poll job status + get result when completed |
-| `GET` | `/jobs` | List recent jobs (filterable by status) |
-| `POST` | `/classify` | Classify text without image upload |
-| `GET` | `/` | Health check |
-
-### Job Lifecycle in PostgreSQL
-
-```mermaid
-stateDiagram-v2
-    [*] --> queued : POST /upload
-    queued --> processing : Celery worker picks up task
-    
-    state processing {
-        INITIALIZING --> PREPROCESSING
-        PREPROCESSING --> OCR
-        OCR --> STAMP_DETECTION
-        STAMP_DETECTION --> SIGNATURE_DETECTION
-        SIGNATURE_DETECTION --> ADDRESS_CHECK
-        ADDRESS_CHECK --> ID_PROOF_CHECK
-        ID_PROOF_CHECK --> FINALIZING
-    }
-    
-    processing --> completed : All steps successful
-    processing --> failed : Exception thrown
-    completed --> [*]
-    failed --> [*]
-```
-
-### Celery Worker Configuration
-
-| Setting | Value | Reason |
-|---------|-------|--------|
-| `worker_prefetch_multiplier` | 1 | Fair task distribution (1 task at a time) |
-| `task_acks_late` | True | Acknowledge after completion (crash recovery) |
-| `task_reject_on_worker_lost` | True | Re-queue task if worker crashes |
-| `task_time_limit` | 600 sec | Hard kill after 10 minutes (prevent stuck tasks) |
-| `task_soft_time_limit` | 540 sec | Graceful timeout at 9 minutes |
-| `worker_max_memory_per_child` | 2 GB | Restart worker if memory exceeds 2 GB |
-| `concurrency` | 2 | 2 parallel workers (each uses ~1.5 GB for ML models) |
-
----
-
-## How to Run the Full System
+## How to Run
 
 ### Prerequisites
 
-| Service | Required | Install |
-|---------|----------|--------|
-| **Python 3.10+** | ✅ | Already installed |
-| **Redis** | ✅ | Installed manually on your machine |
-| **PostgreSQL** | ✅ | Download from https://www.postgresql.org/download/windows/ |
-| **MinIO** | Optional | Already in project (`minio.exe`) |
+| Requirement | Notes |
+|-------------|-------|
+| **Python 3.10+** | Tested on 3.10–3.12 |
 
-### Step 1: Create PostgreSQL Database
-
-```bash
-psql -U postgres -c "CREATE DATABASE intellicheck;"
-```
-
-Default connection string: `postgresql://postgres:postgres@localhost:5432/intellicheck`
-
-To use a different connection, set environment variable:
-```bash
-set DATABASE_URL=postgresql://user:password@host:5432/dbname
-```
-
-> **Note:** Tables are auto-created when FastAPI starts — no manual schema setup needed.
-
-### Step 2: Install Dependencies
+### Install Dependencies
 
 ```bash
 python -m venv venv
@@ -1064,66 +689,17 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### Step 3: Start All Services (3 Terminals)
+### Run the Pipeline
 
 ```bash
-# ── Terminal 1: Redis ──
-redis-server
+# Process a PDF
+python scripts/run_document_pipeline.py data/estamp2.pdf
 
-# ── Terminal 2: Celery Worker ──
-.\venv\Scripts\Activate.ps1
-celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+# Process an image
+python scripts/run_document_pipeline.py data/sample.webp
 
-# ── Terminal 3: FastAPI ──
-.\venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+# Custom output path
+python scripts/run_document_pipeline.py data/sample.webp -o data/test_outputs/custom_result.json
 ```
 
-### Step 4 (Optional): Start MinIO
-
-```bash
-# ── Terminal 4: MinIO (only needed if you want document storage) ──
-.\minio.exe server minio-data
-```
-
-### Step 5: Open Swagger UI
-
-Open in browser: **http://127.0.0.1:8000/docs**
-
-### Usage Examples
-
-```bash
-# Async upload (large files — returns job_id instantly)
-curl -X POST http://localhost:8000/upload -F "file=@data/estamp2.pdf"
-# Response: { "job_id": "abc-123", "status": "queued", "poll_url": "/jobs/abc-123" }
-
-# Poll for results
-curl http://localhost:8000/jobs/abc-123
-# Response: { "status": "processing", "step": "OCR" }
-# ... wait ...
-# Response: { "status": "completed", "result": { ... full result ... } }
-
-# Sync upload (small files / testing — blocks until done)
-curl -X POST "http://localhost:8000/upload?sync=true" -F "file=@data/sample.webp"
-
-# Feature selection (only run specific checks)
-curl -X POST "http://localhost:8000/upload?features=stamp,signature" -F "file=@data/sample.webp"
-curl -X POST "http://localhost:8000/upload?features=address,idproof" -F "file=@data/aadhaar.jpg"
-
-# List all completed jobs
-curl "http://localhost:8000/jobs?status=completed&limit=10"
-```
-
-### Running Without Celery/Redis/PostgreSQL (Local Testing)
-
-The existing CLI scripts still work without any of the new infrastructure:
-
-```bash
-# These scripts directly call DocumentProcessor — no Celery/Redis/PG needed:
-python scripts/run_document_pipeline.py data/estamp2.pdf --no-minio
-python tests/stamp_detection/test_stamp_detector_simple.py
-python tests/test_document_verification.py
-```
-
-The `?sync=true` API mode also works without Celery (but still needs PostgreSQL for the FastAPI startup table check — this can be skipped if PG is not running, a warning is logged but the server still starts).
-
+Output is automatically saved to `data/test_outputs/`.

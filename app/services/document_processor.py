@@ -1,13 +1,11 @@
 """
 Document processing service layer.
 
-Shared by both FastAPI routes and CLI scripts.
 Orchestrates preprocessing → OCR → classification → stamp detection flow.
-MinIO integration is optional.
+Used by CLI scripts and test harnesses.
 """
 
 import os
-import io
 import cv2
 import uuid
 import tempfile
@@ -32,43 +30,23 @@ class DocumentProcessor:
     """
     Unified document processing pipeline.
     
-    Handles preprocessing, OCR, and classification.
-    Can optionally integrate with MinIO.
+    Handles preprocessing, OCR, classification, stamp detection,
+    address verification, and ID proof validation.
     """
 
-    def __init__(self, use_minio: bool = False):
-        """
-        Initialize processor.
-        
-        Args:
-            use_minio: If True, save intermediate results to MinIO.
-                      MinIO client must be configured in app.services.minio_client.
-        """
+    def __init__(self):
+        """Initialize processor with all pipeline components."""
         self.ocr_pipeline = OCRPipeline()
         self.classification_pipeline = ClassificationPipeline()
         self.stamp_pipeline = StampDetectionPipeline(
             ocr_engine=self.ocr_pipeline.engine
         )
         self.pdf_parser = PDFParser()
-        self.use_minio = use_minio
-        self.minio_client = None
-        self.bucket_name = None
-
-        if use_minio:
-            try:
-                from app.services.minio_client import client, bucket_name
-                self.minio_client = client
-                self.bucket_name = bucket_name
-                logger.info("MinIO integration enabled")
-            except Exception as e:
-                logger.warning(f"MinIO integration failed: {e}. Continuing without MinIO.")
-                self.use_minio = False
 
     def process_document(
         self,
         image_path: str,
         doc_id: Optional[str] = None,
-        save_minio: bool = False,
         output_dir: Optional[str] = None,
         features: Optional[Set[str]] = None,
         progress_callback: Optional[Callable[[str], None]] = None,
@@ -83,12 +61,16 @@ class DocumentProcessor:
             3. OCR (parse + format)
             4. Classification
             5. Stamp / signature / QR detection
+            6. Address extraction
+            7. ID proof field validation
 
         Args:
             image_path: Path to input image or PDF file.
             doc_id: Optional document ID (generated if not provided).
-            save_minio: If True and MinIO configured, save intermediate results.
             output_dir: Optional directory path to save visualization images.
+            features: Optional set of features to run (stamp, signature, address, idproof).
+                      If None, all features are enabled.
+            progress_callback: Optional callback for progress reporting.
             **kwargs: Additional metadata to include in response.
 
         Returns:
@@ -99,7 +81,6 @@ class DocumentProcessor:
                 - ocr_result (formatted OCR output)
                 - classification (document type, confidence, etc.)
                 - stamp_detection (stamps, signatures, QR, bounding boxes)
-                - preprocessing (saved object keys if saved to MinIO)
                 - status
                 - error (if processing failed)
                 - traceback (if processing failed)
@@ -113,7 +94,6 @@ class DocumentProcessor:
             return self._process_pdf_document(
                 image_path,
                 doc_id=doc_id,
-                save_minio=save_minio,
                 filename=filename,
                 output_dir=output_dir,
                 features=features,
@@ -133,7 +113,6 @@ class DocumentProcessor:
         return self._process_image_document(
             image_path,
             doc_id=doc_id,
-            save_minio=save_minio,
             filename=filename,
             output_dir=output_dir,
             features=features,
@@ -145,7 +124,6 @@ class DocumentProcessor:
         self,
         image_path: str,
         doc_id: str,
-        save_minio: bool = False,
         filename: Optional[str] = None,
         page_number: Optional[int] = None,
         source_file: Optional[str] = None,
@@ -202,48 +180,7 @@ class DocumentProcessor:
 
             result["quality"] = quality_info
 
-            # ── Step 2: Optionally save preprocessed image to MinIO ──
-            preprocessing_info = {}
-            if save_minio and self.use_minio and self.minio_client:
-                try:
-                    _, img_encoded = cv2.imencode(".png", preprocessed)
-                    preprocessed_bytes = img_encoded.tobytes()
-
-                    base_name = os.path.splitext(filename)[0]
-                    original_key = f"{doc_id}/original/{filename}"
-                    preprocessed_key = f"{doc_id}/preprocessed/{base_name}_preprocessed.png"
-
-                    # Save original
-                    with open(image_path, 'rb') as f:
-                        original_data = f.read()
-                    self.minio_client.put_object(
-                        self.bucket_name,
-                        original_key,
-                        data=io.BytesIO(original_data),
-                        length=len(original_data),
-                        content_type=self._content_type_for_filename(filename),
-                    )
-
-                    # Save preprocessed
-                    self.minio_client.put_object(
-                        self.bucket_name,
-                        preprocessed_key,
-                        data=io.BytesIO(preprocessed_bytes),
-                        length=len(preprocessed_bytes),
-                        content_type="image/png",
-                    )
-
-                    preprocessing_info["original_key"] = original_key
-                    preprocessing_info["preprocessed_key"] = preprocessed_key
-                    logger.info(f"Saved to MinIO: {original_key}, {preprocessed_key}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to save to MinIO: {e}")
-
-            if preprocessing_info:
-                result["preprocessing"] = preprocessing_info
-
-            # ── Step 3: Run OCR ──
+            # ── Step 2: Run OCR ──
             if progress_callback:
                 progress_callback("OCR")
             logger.info(f"Running OCR for {doc_id}")
@@ -255,12 +192,12 @@ class DocumentProcessor:
 
             result["ocr_result"] = formatted_result
 
-            # ── Step 4: Classify ──
+            # ── Step 3: Classify ──
             logger.info(f"Classifying document {doc_id}")
             classification_result = self.classification_pipeline.run(parsed_result)
             result["classification"] = classification_result.to_dict()
 
-            # ── Step 5: Stamp / Signature / QR Detection (conditional) ──
+            # ── Step 4: Stamp / Signature / QR Detection (conditional) ──
             if run_stamp:
                 if progress_callback:
                     progress_callback("STAMP_DETECTION")
@@ -282,7 +219,7 @@ class DocumentProcessor:
                         image, stamp_result, output_dir, filename, page_number
                     )
 
-            # ── Step 6: Address Extraction (conditional) ──
+            # ── Step 5: Address Extraction (conditional) ──
             if run_address:
                 if progress_callback:
                     progress_callback("ADDRESS_CHECK")
@@ -297,7 +234,7 @@ class DocumentProcessor:
                     logger.warning(f"Address extraction failed for {doc_id}: {addr_err}")
                     result["address_extraction"] = {"error": str(addr_err)}
 
-            # ── Step 7: ID Proof Field Validation (conditional) ──
+            # ── Step 6: ID Proof Field Validation (conditional) ──
             if run_idproof:
                 if progress_callback:
                     progress_callback("ID_PROOF_CHECK")
@@ -333,7 +270,6 @@ class DocumentProcessor:
         self,
         pdf_path: str,
         doc_id: str,
-        save_minio: bool = False,
         filename: Optional[str] = None,
         output_dir: Optional[str] = None,
         features: Optional[Set[str]] = None,
@@ -364,7 +300,6 @@ class DocumentProcessor:
                 page_result = self._process_image_document(
                     page_image.image_path,
                     doc_id=f"{doc_id}-page-{page_image.page_number}",
-                    save_minio=save_minio,
                     filename=f"{os.path.splitext(filename)[0]}_page{page_image.page_number}.png",
                     page_number=page_image.page_number,
                     source_file=filename,
@@ -392,9 +327,6 @@ class DocumentProcessor:
             ]
             if failed_pages:
                 result["failed_pages"] = failed_pages
-
-            if save_minio and self.use_minio and self.minio_client:
-                self._save_original_to_minio(pdf_path, doc_id, filename)
 
         except Exception as e:
             logger.error(f"Error processing PDF {doc_id}: {e}", exc_info=True)
@@ -454,36 +386,6 @@ class DocumentProcessor:
             classifications,
             key=lambda classification: classification.get("confidence", 0.0),
         )
-
-    def _save_original_to_minio(self, file_path: str, doc_id: str, filename: str) -> None:
-        try:
-            object_key = f"{doc_id}/original/{filename}"
-            with open(file_path, "rb") as f:
-                original_data = f.read()
-
-            self.minio_client.put_object(
-                self.bucket_name,
-                object_key,
-                data=io.BytesIO(original_data),
-                length=len(original_data),
-                content_type=self._content_type_for_filename(filename),
-            )
-            logger.info(f"Saved original document to MinIO: {object_key}")
-        except Exception as e:
-            logger.warning(f"Failed to save original document to MinIO: {e}")
-
-    def _content_type_for_filename(self, filename: str) -> str:
-        extension = os.path.splitext(filename)[1].lower()
-        return {
-            ".pdf": "application/pdf",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".webp": "image/webp",
-            ".bmp": "image/bmp",
-            ".tif": "image/tiff",
-            ".tiff": "image/tiff",
-        }.get(extension, "application/octet-stream")
 
     def _unknown_classification(self) -> Dict[str, Any]:
         return {
@@ -618,11 +520,10 @@ class DocumentProcessor:
         file_bytes: bytes,
         filename: str,
         doc_id: Optional[str] = None,
-        save_minio: bool = True,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Process a document from bytes (e.g., uploaded file).
+        Process a document from bytes (e.g., for testing).
 
         Writes bytes to temp file, processes, then cleans up.
 
@@ -630,7 +531,6 @@ class DocumentProcessor:
             file_bytes: Raw image bytes.
             filename: Original filename.
             doc_id: Optional document ID.
-            save_minio: If True, save to MinIO.
             **kwargs: Additional metadata.
 
         Returns:
@@ -646,7 +546,6 @@ class DocumentProcessor:
             return self.process_document(
                 tmp.name,
                 doc_id=doc_id,
-                save_minio=save_minio,
                 filename=filename,
                 **kwargs
             )
