@@ -9,46 +9,46 @@
 
 ```mermaid
 graph TB
-    subgraph "🌐 API Gateway (FastAPI)"
-        A1["POST /upload<br/>Async Upload → job_id"]
-        A1S["POST /upload?sync=true<br/>Sync Processing"]
-        A2["POST /classify<br/>Text-only Classification"]
-        A3["GET /jobs/{id}<br/>Poll Job Status"]
-        A4["GET /jobs<br/>List All Jobs"]
-        A5["GET /<br/>Health Check"]
+    subgraph APIGatewayFastAPI
+        A1["POST /upload\nAsync Upload → job_id"]
+        A1S["POST /upload?sync=true\nSync Processing"]
+        A2["POST /classify\nText-only Classification"]
+        A3["GET /jobs/{id}\nPoll Job Status"]
+        A4["GET /jobs\nList All Jobs"]
+        A5["GET /\nHealth Check"]
     end
 
-    subgraph "⚡ Background Processing"
-        RD[("Redis<br/>Message Queue")]
-        CW["Celery Worker<br/>━━━━━━━━━━━━━━━<br/>Lazy-loads models once<br/>Processes documents"]
+    subgraph BackgroundProcessing
+        RD[("Redis\nMessage Queue")]
+        CW["Celery Worker\n━━━━━━━━━━━━━━━\nLazy-loads models once\nProcesses documents"]
     end
 
-    subgraph "🧠 Orchestration Layer"
-        DP["DocumentProcessor<br/>━━━━━━━━━━━━━━━<br/>Central Brain<br/>Manages all pipelines"]
+    subgraph OrchestrationLayer
+        DP["DocumentProcessor\n━━━━━━━━━━━━━━━\nCentral Brain\nManages all pipelines"]
     end
 
-    subgraph "📄 Input Handling"
-        PDF["PDFParser<br/>pypdfium2<br/>PDF → Page Images"]
-        PRE["Preprocessor<br/>Blur Detection<br/>Image Sharpening"]
+    subgraph InputHandling
+        PDF["PDFParser\npypdfium2\nPDF → Page Images"]
+        PRE["Preprocessor\nBlur Detection\nImage Sharpening"]
     end
 
-    subgraph "🔍 Analysis Pipelines"
+    subgraph AnalysisPipelines
         direction TB
-        OCR["OCR Pipeline<br/>━━━━━━━━━━━━<br/>PaddleOCR 3.5<br/>Text Extraction"]
-        CLS["Classification<br/>━━━━━━━━━━━━<br/>Rule-Based Scoring<br/>5 Document Types"]
-        STM["Stamp Detection<br/>━━━━━━━━━━━━<br/>YOLOv8 + E-Stamp<br/>QR + Anomaly"]
+        OCR["OCR Pipeline\n━━━━━━━━━━━━\nPaddleOCR 3.5\nText Extraction"]
+        CLS["Classification\n━━━━━━━━━━━━\nRule-Based Scoring\n5 Document Types"]
+        STM["Stamp Detection\n━━━━━━━━━━━━\nYOLOv8 + E-Stamp\nQR + Anomaly"]
     end
 
-    subgraph "✅ Verification Engine"
+    subgraph VerificationEngine
         direction TB
-        FV["Field Validators<br/>Aadhaar · PAN · Passport<br/>Verhoeff Checksum"]
-        AV["Address Verification<br/>Extract · Normalize<br/>Fuzzy Match"]
-        PC["Proof Check<br/>Cross-Document<br/>PASS / REVIEW / REJECT"]
+        FV["Field Validators\nAadhaar · PAN · Passport\nVerhoeff Checksum"]
+        AV["Address Verification\nExtract · Normalize\nFuzzy Match"]
+        PC["Proof Check\nCross-Document\nPASS / REVIEW / REJECT"]
     end
 
-    subgraph "💾 Storage"
-        MIO["MinIO Object Store<br/>Original + Preprocessed"]
-        PG[("PostgreSQL<br/>Job Tracking + Audit")]
+    subgraph Storage
+        MIO["MinIO Object Store\nOriginal + Preprocessed"]
+        PG[("PostgreSQL\nJob Tracking + Audit")]
     end
 
     A1 -->|"Stream to disk"| RD
@@ -81,7 +81,7 @@ graph TB
 
 ## Module Map
 
-```
+```text
 app/
 ├── main.py                              ← FastAPI app factory, router registration
 │
@@ -185,35 +185,35 @@ tests/
 
 ```mermaid
 graph LR
-    subgraph "INPUT"
-        UP["📁 File Upload<br/>(Image or PDF)"]
+    subgraph INPUT
+        UP["📁 File Upload\n(Image or PDF)"]
     end
 
-    subgraph "PARSE"
+    subgraph PARSE
         R{"PDF?"}
-        PDF["Render Pages<br/>75 DPI → PNG"]
-        IMG["Load Image<br/>BGR numpy"]
+        PDF["Render Pages\n75 DPI → PNG"]
+        IMG["Load Image\nBGR numpy"]
     end
 
-    subgraph "PREPROCESS"
-        BL["Blur Detection<br/>3×3 grid Laplacian"]
-        SH["Sharpen<br/>Unsharp Mask"]
+    subgraph PREPROCESS
+        BL["Blur Detection\n3×3 grid Laplacian"]
+        SH["Sharpen\nUnsharp Mask"]
     end
 
-    subgraph "EXTRACT"
-        OCR["PaddleOCR 3.5<br/>Text + Bounding Boxes"]
+    subgraph EXTRACT
+        OCR["PaddleOCR 3.5\nText + Bounding Boxes"]
     end
 
-    subgraph "ANALYZE"
-        CL["Classification<br/>Keyword Scoring"]
-        ST["Stamp Detection<br/>YOLO + E-Stamp"]
+    subgraph ANALYZE
+        CL["Classification\nKeyword Scoring"]
+        ST["Stamp Detection\nYOLO + E-Stamp"]
     end
 
-    subgraph "STORE"
-        MI["MinIO<br/>Save originals"]
+    subgraph STORE
+        MI["MinIO\nSave originals"]
     end
 
-    subgraph "OUTPUT"
+    subgraph OUTPUT
         RES["📋 JSON Response"]
     end
 
@@ -235,14 +235,14 @@ graph LR
 
 ```mermaid
 graph TB
-    PDF["📄 Multi-page PDF"] --> RENDER["pypdfium2<br/>Render each page"]
+    PDF["📄 Multi-page PDF"] --> RENDER["pypdfium2\nRender each page"]
     RENDER --> P1["Page 1 PNG"]
     RENDER --> P2["Page 2 PNG"]
     RENDER --> P3["Page N PNG"]
     
-    P1 --> PROC1["Full Pipeline<br/>OCR → Classify → Stamp"]
-    P2 --> PROC2["Full Pipeline<br/>OCR → Classify → Stamp"]
-    P3 --> PROC3["Full Pipeline<br/>OCR → Classify → Stamp"]
+    P1 --> PROC1["Full Pipeline\nOCR → Classify → Stamp"]
+    P2 --> PROC2["Full Pipeline\nOCR → Classify → Stamp"]
+    P3 --> PROC3["Full Pipeline\nOCR → Classify → Stamp"]
     
     PROC1 --> AGG["Aggregate Results"]
     PROC2 --> AGG
@@ -262,18 +262,18 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "OCR Pipeline"
-        I["Image"] --> ENG["OCREngine<br/>PaddleOCR 3.5<br/>predict()"]
-        ENG --> PAR["OCRParser<br/>Extract: texts, scores, polygons"]
-        PAR --> FMT["OCRFormatter<br/>Join text blocks"]
+    subgraph OCRPipeline
+        I["Image"] --> ENG["OCREngine\nPaddleOCR 3.5\npredict()"]
+        ENG --> PAR["OCRParser\nExtract: texts, scores, polygons"]
+        PAR --> FMT["OCRFormatter\nJoin text blocks"]
         FMT --> OUT1["{ text, total_blocks, results[] }"]
     end
 
-    subgraph "Classification Pipeline"
-        OUT1 --> CONCAT["Concatenate<br/>all text blocks"]
-        CONCAT --> SCORE["Score against<br/>5 document rules"]
-        SCORE --> WIN["Pick highest<br/>scoring type"]
-        WIN --> REGEX["Extract fields<br/>via regex patterns"]
+    subgraph ClassificationPipeline
+        OUT1 --> CONCAT["Concatenate\nall text blocks"]
+        CONCAT --> SCORE["Score against\n5 document rules"]
+        SCORE --> WIN["Pick highest\nscoring type"]
+        WIN --> REGEX["Extract fields\nvia regex patterns"]
         REGEX --> OUT2["ClassificationResult"]
     end
 
@@ -285,13 +285,13 @@ graph TB
 
 ```mermaid
 graph LR
-    TXT["OCR Text"] --> S1["Aadhaar<br/>Score: 0.78"]
-    TXT --> S2["PAN<br/>Score: 0.12"]
-    TXT --> S3["Passport<br/>Score: 0.05"]
-    TXT --> S4["Utility Bill<br/>Score: 0.02"]
-    TXT --> S5["Bank Statement<br/>Score: 0.01"]
+    TXT["OCR Text"] --> S1["Aadhaar\nScore: 0.78"]
+    TXT --> S2["PAN\nScore: 0.12"]
+    TXT --> S3["Passport\nScore: 0.05"]
+    TXT --> S4["Utility Bill\nScore: 0.02"]
+    TXT --> S5["Bank Statement\nScore: 0.01"]
     
-    S1 --> W["🏆 Winner:<br/>aadhaar_card"]
+    S1 --> W["🏆 Winner:\naadhaar_card"]
     
     style W fill:#0f3460,color:#fff,stroke:none
     style S1 fill:#e94560,color:#fff,stroke:none
@@ -329,24 +329,24 @@ graph TB
     DET --> ESTAMP
     DET --> ANOM
     
-    subgraph "🎯 Physical Detection (YOLO)"
-        YOLO["YOLOv8 Model<br/>(best.pt)"] --> PARSE2["Parse Boxes<br/>conf ≥ 0.5"]
-        PARSE2 --> CROP["Crop Each<br/>Detection"]
-        CROP --> INK["Ink Check<br/>(HSV Saturation)"]
-        INK --> DETS["Detections[]<br/>stamp / signature"]
+    subgraph PhysicalDetectionYOLO
+        YOLO["YOLOv8 Model\n(best.pt)"] --> PARSE2["Parse Boxes\nconf ≥ 0.5"]
+        PARSE2 --> CROP["Crop Each\nDetection"]
+        CROP --> INK["Ink Check\n(HSV Saturation)"]
+        INK --> DETS["Detections[]\nstamp / signature"]
     end
 
-    subgraph "📜 E-Stamp Classification"
-        ESTAMP["EStampClassifier"] --> EOCR["OCR Text<br/>(reused from pipeline)"]
-        ESTAMP --> QR["QR Processor<br/>OpenCV QR Code"]
-        EOCR --> ESCORE["Weighted Scoring<br/>cert=40, duty=25, state=15"]
+    subgraph EStampClassification
+        ESTAMP["EStampClassifier"] --> EOCR["OCR Text\n(reused from pipeline)"]
+        ESTAMP --> QR["QR Processor\nOpenCV QR Code"]
+        EOCR --> ESCORE["Weighted Scoring\ncert=40, duty=25, state=15"]
         QR --> ESCORE
         ESCORE --> EDEC{"Score ≥ 50?"}
         EDEC -->|Yes| ET["✅ e_stamp"]
         EDEC -->|No| NT["❌ non_e_stamp"]
     end
 
-    subgraph "🔬 Quality Checks"
+    subgraph QualityChecks
         ANOM["AnomalyDetector"] --> F1["Faded? (std &lt; 30)"]
         ANOM --> F2["Low Contrast? (range &lt; 50)"]
         ANOM --> F3["Blurry? (Laplacian &lt; 100)"]
@@ -386,14 +386,14 @@ The `QRProcessor` (`app/stamp_detection/qr_processor.py`) implements a streamlin
 ```mermaid
 graph TD
     Start["📥 Input Image"] --> Gray["Grayscale Conversion"]
-    Gray --> Decode{"1. Try OpenCV QR Decode<br/>(detectAndDecode)"}
+    Gray --> Decode{"1. Try OpenCV QR Decode\n(detectAndDecode)"}
     
-    Decode -->|Success| Success["✅ Return QR Data<br/>(qr_present=True, qr_decoded=True)"]
+    Decode -->|Success| Success["✅ Return QR Data\n(qr_present=True, qr_decoded=True)"]
     Decode -->|Failed| Visual{"2. QR Presence Check"}
     
     Visual -->|"Nested Contours / detect check"| Found{"QR Present?"}
-    Found -->|Yes| Flag["⚠️ QR Detected visually but Decode Failed<br/>(qr_present=True, qr_decoded=False)"]
-    Found -->|No| None["❌ No QR Code Found<br/>(qr_present=False, qr_decoded=False)"]
+    Found -->|Yes| Flag["⚠️ QR Detected visually but Decode Failed\n(qr_present=True, qr_decoded=False)"]
+    Found -->|No| None["❌ No QR Code Found\n(qr_present=False, qr_decoded=False)"]
 
     style Start fill:#1a1a2e,stroke:#e94560,color:#fff
     style Success fill:#00b894,color:#fff
@@ -417,15 +417,15 @@ To identify the presence of a QR code even when it is too blurry or distorted to
 
 ```mermaid
 graph TB
-    subgraph "Step 1: Extract"
+    subgraph Step1Extract
         OCR2["OCR Text"] --> EXT["AddressExtractor"]
-        EXT --> PIN["Pincode<br/>6-digit regex"]
-        EXT --> STATE["State<br/>32 states list"]
-        EXT --> CITY["City<br/>45+ cities list"]
-        EXT --> LINE["Address Line<br/>Before pincode / labeled"]
+        EXT --> PIN["Pincode\n6-digit regex"]
+        EXT --> STATE["State\n32 states list"]
+        EXT --> CITY["City\n45+ cities list"]
+        EXT --> LINE["Address Line\nBefore pincode / labeled"]
     end
 
-    subgraph "Step 2: Normalize"
+    subgraph Step2Normalize
         PIN --> NORM["AddressNormalizer"]
         STATE --> NORM
         CITY --> NORM
@@ -435,7 +435,7 @@ graph TB
         NORM --> N3["lowercase + clean"]
     end
 
-    subgraph "Step 3: Match"
+    subgraph Step3Match
         N1 --> MAT["AddressMatcher"]
         N2 --> MAT
         N3 --> MAT
@@ -445,7 +445,7 @@ graph TB
         MAT --> P4["Line1: Fuzzy + Containment"]
     end
 
-    subgraph "Step 4: Decision"
+    subgraph Step4Decision
         P1 --> DEC{"All Match?"}
         P2 --> DEC
         P3 --> DEC
@@ -476,14 +476,14 @@ graph TB
 
 ```mermaid
 graph TB
-    DOCS["📄 Processed Documents<br/>(Aadhaar + PAN + Utility Bill)"] --> GS["generate_status()"]
+    DOCS["📄 Processed Documents\n(Aadhaar + PAN + Utility Bill)"] --> GS["generate_status()"]
     
-    GS --> C1["1️⃣ Required Proofs<br/>≥1 ID Proof<br/>≥1 Address Proof"]
-    GS --> C2["2️⃣ Field Validation<br/>Aadhaar Checksum<br/>PAN Format<br/>Passport Format"]
-    GS --> C3["3️⃣ Name Match<br/>Cross-document<br/>name consistency"]
-    GS --> C4["4️⃣ DOB Match<br/>Cross-document<br/>date consistency"]
-    GS --> C5["5️⃣ Address Match<br/>Cross-document<br/>address consistency"]
-    GS --> C6["6️⃣ Confidence<br/>Flag if<br/>&lt; 0.30"]
+    GS --> C1["1️⃣ Required Proofs\n≥1 ID Proof\n≥1 Address Proof"]
+    GS --> C2["2️⃣ Field Validation\nAadhaar Checksum\nPAN Format\nPassport Format"]
+    GS --> C3["3️⃣ Name Match\nCross-document\nname consistency"]
+    GS --> C4["4️⃣ DOB Match\nCross-document\ndate consistency"]
+    GS --> C5["5️⃣ Address Match\nCross-document\naddress consistency"]
+    GS --> C6["6️⃣ Confidence\nFlag if\n&lt; 0.30"]
 
     C1 -->|Missing| REJ
     C2 -->|Invalid| REJ
@@ -499,9 +499,9 @@ graph TB
     C5 -->|OK| PASS2
     C6 -->|OK| PASS2
 
-    REJ["🔴 REJECT<br/>Auto-reject"]
-    REV["🟡 REVIEW<br/>Manual check"]
-    PASS2["🟢 PASS<br/>Auto-approve"]
+    REJ["🔴 REJECT\nAuto-reject"]
+    REV["🟡 REVIEW\nManual check"]
+    PASS2["🟢 PASS\nAuto-approve"]
 
     style DOCS fill:#e94560,color:#fff,stroke:none
     style REJ fill:#d63031,color:#fff,stroke:none,stroke-width:2px
@@ -513,13 +513,13 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph "🪪 ID Proof Types"
+    subgraph IDProofTypes
         I1["Aadhaar Card"]
         I2["PAN Card"]
         I3["Passport"]
     end
 
-    subgraph "🏠 Address Proof Types"
+    subgraph AddressProofTypes
         A1["Aadhaar Card"]
         A2["Passport"]
         A3["Utility Bill"]
@@ -547,7 +547,7 @@ graph LR
 
 ### Verdict Decision Tree
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │              generate_status(docs)                │
 │                                                  │
@@ -652,12 +652,12 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    DP["DocumentProcessor"] --> OE["OCREngine<br/>(Single Instance)"]
+    DP["DocumentProcessor"] --> OE["OCREngine\n(Single Instance)"]
     
-    OE --> OP["OCRPipeline<br/>Main text extraction"]
-    OE --> SP["StampDetectionPipeline<br/>E-stamp text analysis"]
+    OE --> OP["OCRPipeline\nMain text extraction"]
+    OE --> SP["StampDetectionPipeline\nE-stamp text analysis"]
     
-    Note["⚡ PaddleOCR loaded ONCE<br/>Shared across pipelines<br/>Saves ~500MB memory"]
+    Note["⚡ PaddleOCR loaded ONCE\nShared across pipelines\nSaves ~500MB memory"]
 
     style OE fill:#e94560,color:#fff,stroke:none,stroke-width:2px
     style Note fill:#2d3436,color:#dfe6e9,stroke:none
@@ -667,7 +667,7 @@ graph TB
 
 ## Storage Architecture (MinIO)
 
-```
+```text
 documents/                          ← Bucket
 └── {uuid}/                         ← Per-document folder
     ├── original/
@@ -800,8 +800,8 @@ The original `/upload` endpoint had 4 critical problems for real-world use:
 
 ```mermaid
 graph LR
-    subgraph "❌ BEFORE — Blocking"
-        C1["Client"] -->|"POST /upload<br/>(waits 30-300 sec)"| API1["FastAPI<br/>file.read() → RAM"]
+    subgraph BEFOREBlocking
+        C1["Client"] -->|"POST /upload\n(waits 30-300 sec)"| API1["FastAPI\nfile.read() → RAM"]
         API1 -->|"Blocks entire server"| DP1["DocumentProcessor"]
         DP1 -->|"Response after processing"| C1
     end
@@ -809,15 +809,15 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "✅ AFTER — Async with Background Workers"
-        C2["Client"] -->|"POST /upload"| API2["FastAPI<br/>Stream → Disk"]
-        API2 -->|"Instant response<br/>job_id + status=queued"| C2
-        API2 -->|"Create Job row"| PG[("PostgreSQL<br/>jobs table")]
-        API2 -->|"Dispatch task"| RD[("Redis<br/>Message Queue")]
-        RD --> W["Celery Worker<br/>Loads YOLO+PaddleOCR once<br/>Processes documents"]
-        W -->|"Update progress<br/>PREPROCESSING → OCR → ..."| PG
+    subgraph AFTERAsyncwithBackgroundWorkers
+        C2["Client"] -->|"POST /upload"| API2["FastAPI\nStream → Disk"]
+        API2 -->|"Instant response\njob_id + status=queued"| C2
+        API2 -->|"Create Job row"| PG[("PostgreSQL\njobs table")]
+        API2 -->|"Dispatch task"| RD[("Redis\nMessage Queue")]
+        RD --> W["Celery Worker\nLoads YOLO+PaddleOCR once\nProcesses documents"]
+        W -->|"Update progress\nPREPROCESSING → OCR → ..."| PG
         W -->|"Save final result"| PG
-        C2 -->|"GET /jobs/{id}<br/>Poll for status"| PG
+        C2 -->|"GET /jobs/{id}\nPoll for status"| PG
     end
 
     style PG fill:#0f3460,color:#fff,stroke:none
@@ -843,7 +843,7 @@ sequenceDiagram
     Note over API: Validate extension (.pdf, .jpg, etc.)
     
     API->>Disk: Stream file in 1 MB chunks
-    Note over API,Disk: Check size during streaming<br/>Abort at 100 MB limit
+    Note over API,Disk: Check size during streaming\nAbort at 100 MB limit
     
     API->>DB: INSERT Job (status=queued)
     API->>Redis: Dispatch process_document_task
