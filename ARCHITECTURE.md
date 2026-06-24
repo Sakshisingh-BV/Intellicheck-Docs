@@ -1,7 +1,7 @@
 # Intellicheck — System Architecture
 
 > Intelligent Document Verification Platform  
-> OCR · Classification · Stamp Detection · Address Verification · ID Proof Validation
+> OCR · Stamp Detection · Signature Check · Address Verification · ID Proof Validation
 
 ---
 
@@ -9,12 +9,21 @@
 
 ```mermaid
 graph TB
-    subgraph "🌐 API Gateway"
-        A1["POST /upload<br/>File Upload + Full Processing"]
-        A2["POST /classify<br/>Text-only Classification"]
+    subgraph "🌐 Clients & API Gateway (FastAPI)"
+        C["Client Application / User"]
+        A1["POST /upload<br/>(Async Upload / Job Queue)"]
+        A2["GET /jobs/{id}<br/>(Status & Results Polling)"]
+        A3["GET /jobs<br/>(Job History List)"]
+        A4["POST /classify<br/>(Text-only Classification)"]
     end
 
-    subgraph "🧠 Orchestration Layer"
+    subgraph "🔀 Queue & Persistence"
+        RD[("Redis Broker & Temp Status<br/>(Celery Queue + 24h Expiry)")]
+        PG[("PostgreSQL Database<br/>(Permanent Audit & Job Store)")]
+    end
+
+    subgraph "⚙️ Worker & Orchestration"
+        W["Celery Worker Process<br/>(Document Tasks)"]
         DP["DocumentProcessor<br/>━━━━━━━━━━━━━━━<br/>Central Brain<br/>Manages all pipelines"]
     end
 
@@ -27,7 +36,7 @@ graph TB
         direction TB
         OCR["OCR Pipeline<br/>━━━━━━━━━━━━<br/>PaddleOCR 3.5<br/>Text Extraction"]
         CLS["Classification<br/>━━━━━━━━━━━━<br/>Rule-Based Scoring<br/>5 Document Types"]
-        STM["Stamp Detection<br/>━━━━━━━━━━━━<br/>YOLOv8 + E-Stamp<br/>QR + Anomaly"]
+        STM["Stamp & Signature Detection<br/>━━━━━━━━━━━━<br/>YOLOv8 + E-Stamp<br/>QR + Anomaly"]
     end
 
     subgraph "✅ Verification Engine"
@@ -41,8 +50,27 @@ graph TB
         MIO["MinIO Object Store<br/>Original + Preprocessed"]
     end
 
-    A1 --> DP
-    A2 --> CLS
+    %% Client Interactions
+    C -->|Upload Document| A1
+    C -->|Poll Status / Results| A2
+    C -->|List Job History| A3
+    C -->|Classify Text Directly| A4
+
+    %% API Gateway to Queue & Persistence
+    A1 -->|1. Dispatch Celery Task| RD
+    A1 -->|2. Create 'queued' Job| PG
+    A2 -->|Read Status/Result| PG
+    A3 -->|Query Job Records| PG
+    A4 -->|Direct Sync Classify| CLS
+
+    %% Redis Queue to Celery Worker
+    RD -->|3. Pick up task| W
+    W -->|4. Execute Pipeline| DP
+    
+    %% Celery Worker to PostgreSQL Progress updates
+    W -->|Update Progress Stages / Final Result| PG
+
+    %% Core Document Processor Flow
     DP --> PDF --> PRE
     DP --> PRE
     PRE --> OCR --> CLS
@@ -56,386 +84,492 @@ graph TB
     style CLS fill:#16213e,stroke:#0f3460,color:#fff
     style STM fill:#16213e,stroke:#0f3460,color:#fff
     style PC fill:#0f3460,stroke:#e94560,color:#fff,stroke-width:2px
+    style RD fill:#e94560,color:#fff,stroke:none
+    style PG fill:#0f3460,color:#fff,stroke:none
+    style W fill:#1a1a2e,stroke:#e94560,color:#fff
 ```
 
 ---
 
-## Module Map
+## What Happens When You Upload a Document
 
-```
-app/
-├── core/
-│   └── config.py                    ← Centralized settings (limits, URLs, features)
-│
-├── routes/
-│   ├── upload.py                    ← POST /upload (streaming + async/sync)
-│   ├── classify.py                  ← POST /classify (text-only)
-│   └── jobs.py                      ← GET /jobs/{id} + GET /jobs (status polling)
-│
-├── services/
-│   ├── document_processor.py        ← Central orchestrator (features + progress)
-│   └── minio_client.py              ← MinIO object storage client
-│
-├── workers/
-│   ├── celery_app.py                ← Celery + Redis configuration
-│   └── document_tasks.py            ← Background processing task
-│
-├── database/
-│   ├── base.py                      ← SQLAlchemy declarative base
-│   ├── session.py                   ← PostgreSQL session factory
-│   └── models.py                    ← Job model (status, result, audit)
-│
-├── schemas/
-│   ├── upload.py                    ← Upload request/response schemas
-│   ├── classify.py                  ← Classification schemas
-│   └── jobs.py                      ← Job status schemas
-│
-├── document_parsing/
-│   └── pdf_parser.py                ← PDF → page images (pypdfium2)
-│
-├── preprocessing/
-│   ├── blur.py                      ← Multi-region Laplacian blur detection
-│   └── utils.py                     ← Image loading utilities
-│
-├── ocr/
-│   ├── engine.py                    ← PaddleOCR 3.5 wrapper
-│   ├── parser.py                    ← Raw result → structured blocks
-│   └── formatter.py                 ← Blocks → full text output
-│
-├── classification/
-│   ├── classifier.py                ← Weighted keyword scoring engine
-│   ├── document_rules.py            ← 5 document type rule configs
-│   └── result.py                    ← ClassificationResult dataclass
-│
-├── stamp_detection/
-│   ├── detector.py                  ← YOLO orchestrator (StampDetector)
-│   ├── estamp_classifier.py         ← E-stamp document classifier
-│   ├── anomaly_detector.py          ← Crop quality checks
-│   ├── qr_processor.py             ← OpenCV QR decode & presence
-│   └── utils.py                     ← Cropping, ink check, visualization
-│
-├── address_verification/
-│   ├── extractor.py                 ← Regex address extraction from OCR
-│   ├── normalizer.py                ← Abbreviation expansion
-│   ├── matcher.py                   ← Fuzzy + containment matching
-│   ├── freshness.py                 ← Document age validation
-│   └── validator.py                 ← Full verification orchestrator
-│
-├── validation/
-│   ├── validators.py                ← Aadhaar, PAN, Passport, IFSC validators
-│   └── proof_check.py              ← Cross-doc verification → PASS/REVIEW/REJECT
-│
-└── pipelines/
-    ├── ocr_pipeline.py              ← OCR orchestration
-    ├── classification_pipeline.py   ← Classification orchestration
-    └── stamp_detection_pipeline.py  ← Stamp detection orchestration
+### Step 0: You Run These Commands in Terminal
+
+```bash
+# ── Terminal 1: Start Redis ──
+redis-server
+
+# ── Terminal 2: Start Celery Worker ──
+.\venv\Scripts\Activate.ps1
+celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+
+# ── Terminal 3: Start FastAPI ──
+.\venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
 ```
 
----
+### Step 1: Client Uploads File
 
-## Pipeline 1: Document Processing (End-to-End)
+```bash
+# User runs this in Terminal 4:
+curl -X POST http://localhost:8000/upload \
+  -F "file=@data/rental_agreement.pdf" \
+  -F "features=stamp,signature,address,idproof"
+```
+
+### Step 2: What Happens Inside (End-to-End)
 
 ```mermaid
-graph LR
-    subgraph "INPUT"
-        UP["📁 File Upload<br/>(Image or PDF)"]
-    end
+sequenceDiagram
+    autonumber
+    actor User as User (Terminal)
+    participant API as FastAPI /upload<br/>(upload.py)
+    participant Disk as data/uploads/<br/>(Temp File)
+    participant DB as PostgreSQL<br/>(Permanent Store)
+    participant RD as Redis<br/>(Broker & Temp Status)
+    participant W as Celery Worker<br/>(document_tasks.py)
+    participant DP as DocumentProcessor<br/>(Central Brain)
 
-    subgraph "PARSE"
-        R{"PDF?"}
-        PDF["Render Pages<br/>75 DPI → PNG"]
-        IMG["Load Image<br/>BGR numpy"]
-    end
+    User->>API: POST /upload (file + features)
+    
+    Note over API: Validate extension (.pdf, .jpg, .png, etc.)<br/>Parse features: {stamp, signature, address, idproof}
+    
+    API->>Disk: Stream file in 1 MB chunks<br/>(never loads full file into RAM)
+    Note over API,Disk: Check size DURING streaming<br/>Abort if > 100 MB
 
-    subgraph "PREPROCESS"
-        BL["Blur Detection<br/>3×3 grid Laplacian"]
-        SH["Sharpen<br/>Unsharp Mask"]
-    end
+    API->>DB: INSERT INTO jobs (id, status='queued', features=[...])
+    API->>RD: celery.delay(process_document_task, job_id, file_path, features)
+    API-->>User: { job_id: "abc-123", status: "queued", poll_url: "/jobs/abc-123" }
+    
+    Note over User: User is FREE — no waiting!
 
-    subgraph "EXTRACT"
-        OCR["PaddleOCR 3.5<br/>Text + Bounding Boxes"]
-    end
+    RD->>W: Pick up task from queue
+    W->>DB: UPDATE jobs SET status='processing', step='INITIALIZING'
+    
+    W->>DP: process_document(file_path, features, progress_callback)
+    
+    Note over DP: ── PREPROCESSING ──<br/>Load image → Blur detection → Sharpen if blurry
+    DP->>W: progress_callback("PREPROCESSING")
+    W->>DB: UPDATE step='PREPROCESSING'
 
-    subgraph "ANALYZE"
-        CL["Classification<br/>Keyword Scoring"]
-        ST["Stamp Detection<br/>YOLO + E-Stamp"]
-    end
+    Note over DP: ── OCR ──<br/>PaddleOCR 3.5 extracts text + bounding boxes
+    DP->>W: progress_callback("OCR")
+    W->>DB: UPDATE step='OCR'
+    
+    Note over DP: ── CLASSIFICATION ──<br/>Score OCR text against 5 document rules<br/>→ aadhaar_card / pan_card / passport / utility_bill / bank_statement
+    
+    Note over DP: ── STAMP_DETECTION ──<br/>YOLOv8 + EStampClassifier + QRProcessor + AnomalyDetector
+    DP->>W: progress_callback("STAMP_DETECTION")
+    W->>DB: UPDATE step='STAMP_DETECTION'
+    
+    Note over DP: ── SIGNATURE_DETECTION ──<br/>Signatures found in same YOLO pass as stamps
+    DP->>W: progress_callback("SIGNATURE_DETECTION")
+    W->>DB: UPDATE step='SIGNATURE_DETECTION'
+    
+    Note over DP: ── ADDRESS_CHECK ──<br/>AddressExtractor: regex-based pincode/city/state/line extraction
+    DP->>W: progress_callback("ADDRESS_CHECK")
+    W->>DB: UPDATE step='ADDRESS_CHECK'
+    
+    Note over DP: ── ID_PROOF_CHECK ──<br/>validate_extracted_fields: Aadhaar checksum, PAN format, Passport format
+    DP->>W: progress_callback("ID_PROOF_CHECK")
+    W->>DB: UPDATE step='ID_PROOF_CHECK'
+    
+    DP-->>W: Complete result dict
+    W->>W: progress_callback("FINALIZING")
+    W->>DB: UPDATE status='completed', result={...full JSON...}
+    W->>Disk: DELETE temp file (try/finally cleanup)
 
-    subgraph "STORE"
-        MI["MinIO<br/>Save originals"]
-    end
-
-    subgraph "OUTPUT"
-        RES["📋 JSON Response"]
-    end
-
-    UP --> R
-    R -->|Yes| PDF --> IMG
-    R -->|No| IMG
-    IMG --> BL
-    BL -->|Blurry| SH --> OCR
-    BL -->|Sharp| OCR
-    OCR --> CL --> RES
-    OCR --> ST --> RES
-    IMG --> MI
-
-    style UP fill:#e94560,color:#fff,stroke:none
-    style RES fill:#0f3460,color:#fff,stroke:none
+    User->>API: GET /jobs/abc-123
+    API->>DB: SELECT * FROM jobs WHERE id='abc-123'
+    API-->>User: { status: "completed", result: { stamp_detection, address_extraction, field_validation, ... } }
 ```
 
-### PDF Multi-Page Handling
+### Progress Stages (What You See When Polling)
+
+```
+INITIALIZING → PREPROCESSING → OCR → STAMP_DETECTION →
+SIGNATURE_DETECTION → ADDRESS_CHECK → ID_PROOF_CHECK → FINALIZING
+```
+
+Each stage is written to PostgreSQL. When you poll `GET /jobs/{id}`, you see which stage the job is currently on.
+
+---
+
+## Multi-Page PDF Handling
+
+When a PDF is uploaded, `PDFParser` (pypdfium2) renders each page as a PNG at 75 DPI. Each page goes through the **full pipeline independently** (preprocessing → OCR → classification → stamp → address → idproof). After all pages are done, results are **aggregated**.
 
 ```mermaid
 graph TB
-    PDF["📄 Multi-page PDF"] --> RENDER["pypdfium2<br/>Render each page"]
+    PDF["📄 Multi-page PDF"] --> RENDER["pypdfium2<br/>Render each page → PNG"]
     RENDER --> P1["Page 1 PNG"]
     RENDER --> P2["Page 2 PNG"]
     RENDER --> P3["Page N PNG"]
     
-    P1 --> PROC1["Full Pipeline<br/>OCR → Classify → Stamp"]
-    P2 --> PROC2["Full Pipeline<br/>OCR → Classify → Stamp"]
-    P3 --> PROC3["Full Pipeline<br/>OCR → Classify → Stamp"]
+    P1 --> PROC1["Full Pipeline<br/>Preprocess → OCR → Classify<br/>→ Stamp → Address → IDProof"]
+    P2 --> PROC2["Full Pipeline<br/>Preprocess → OCR → Classify<br/>→ Stamp → Address → IDProof"]
+    P3 --> PROC3["Full Pipeline<br/>Preprocess → OCR → Classify<br/>→ Stamp → Address → IDProof"]
     
     PROC1 --> AGG["Aggregate Results"]
     PROC2 --> AGG
     PROC3 --> AGG
     
-    AGG --> R1["OCR: Merge all text"]
+    AGG --> R1["OCR: Merge all text across pages"]
     AGG --> R2["Classification: Best confidence page wins"]
-    AGG --> R3["Stamps: Union all bounding boxes"]
+    AGG --> R3["Stamps/Signatures: Union all bounding boxes"]
+    AGG --> R4["Address: Extract from merged text"]
 
     style PDF fill:#e94560,color:#fff,stroke:none
     style AGG fill:#0f3460,color:#fff,stroke:none
 ```
 
----
+**Aggregation Logic (from `document_processor.py`):**
 
-## Pipeline 2: OCR + Classification
-
-```mermaid
-graph TB
-    subgraph "OCR Pipeline"
-        I["Image"] --> ENG["OCREngine<br/>PaddleOCR 3.5<br/>predict()"]
-        ENG --> PAR["OCRParser<br/>Extract: texts, scores, polygons"]
-        PAR --> FMT["OCRFormatter<br/>Join text blocks"]
-        FMT --> OUT1["{ text, total_blocks, results[] }"]
-    end
-
-    subgraph "Classification Pipeline"
-        OUT1 --> CONCAT["Concatenate<br/>all text blocks"]
-        CONCAT --> SCORE["Score against<br/>5 document rules"]
-        SCORE --> WIN["Pick highest<br/>scoring type"]
-        WIN --> REGEX["Extract fields<br/>via regex patterns"]
-        REGEX --> OUT2["ClassificationResult"]
-    end
-
-    style I fill:#e94560,color:#fff,stroke:none
-    style OUT2 fill:#0f3460,color:#fff,stroke:none
-```
-
-### Classification: Document Types & Scoring
-
-```mermaid
-graph LR
-    TXT["OCR Text"] --> S1["Aadhaar<br/>Score: 0.78"]
-    TXT --> S2["PAN<br/>Score: 0.12"]
-    TXT --> S3["Passport<br/>Score: 0.05"]
-    TXT --> S4["Utility Bill<br/>Score: 0.02"]
-    TXT --> S5["Bank Statement<br/>Score: 0.01"]
-    
-    S1 --> W["🏆 Winner:<br/>aadhaar_card"]
-    
-    style W fill:#0f3460,color:#fff,stroke:none
-    style S1 fill:#e94560,color:#fff,stroke:none
-```
-
-| Document | Category | Primary Keywords | Extracted Fields |
-|---|---|---|---|
-| **Aadhaar Card** | ID + Address | `aadhaar`, `uidai` | aadhaar_number, DOB, gender, pincode |
-| **PAN Card** | ID only | `permanent account number` | pan_number, DOB |
-| **Passport** | ID + Address | `passport`, `republic of india` | passport_number, DOB, issue/expiry dates |
-| **Utility Bill** | Address only | `electricity bill`, `consumer number` | consumer_number, bill_date, amount |
-| **Bank Statement** | Address only | `bank statement`, `ifsc` | account_number, ifsc_code, period |
-
-### Scoring Weights
-
-| Keyword Tier | Weight | Purpose |
-|---|---|---|
-| **Primary** | +3.0 | Strong identity signals (`aadhaar`, `passport`) |
-| **Secondary** | +2.0 | Supporting context (`government of india`) |
-| **Field Hints** | +1.0 | Weak signals (`dob`, `male`, `s/o`) |
-| **Negative** | −2.0 | Disambiguation (`income tax` on Aadhaar = penalty) |
-
-> **Confidence** = matched_score / max_possible_score  
-> Below **0.15** → classified as `unknown`
+| Data | Strategy | Why |
+|------|----------|-----|
+| **OCR Text** | Merge all pages with `\n\n` separator | Full text needed for address extraction and classification |
+| **Classification** | Pick the page with highest confidence score | A 10-page rental agreement might only have the e-stamp on page 1 |
+| **Stamps** | Union all bounding boxes, each tagged with `page_number` | Stamps can appear on any page |
+| **Signatures** | Union all bounding boxes, each tagged with `page_number` | Signatures can appear on any page |
+| **Temp PNGs** | Deleted in `finally` block after processing | Cleanup to prevent disk fill |
 
 ---
 
-## Pipeline 3: Stamp Detection
+## Feature 1: Stamp & E-Stamp Check
+
+**Goal:** Detect physical stamps, classify whether document is an e-stamp, extract certificate number, stamp duty, state, date, and read QR codes.
+
+### What Triggers It
+
+User includes `stamp` in features:
+```bash
+curl -X POST "http://localhost:8000/upload?features=stamp" -F "file=@data/estamp2.pdf"
+```
+
+In `document_processor.py` → `run_stamp = features is None or "stamp" in features or "signature" in features`
+
+### End-to-End Flow
 
 ```mermaid
-graph TB
-    IMG["🖼️ Input Image"] --> DET["StampDetector.detect()"]
+sequenceDiagram
+    autonumber
+    participant DP as DocumentProcessor
+    participant SDP as StampDetectionPipeline
+    participant DET as StampDetector
+    participant YOLO as YOLOv8 Model<br/>(best.pt)
+    participant ESC as EStampClassifier
+    participant QR as QRProcessor<br/>(OpenCV)
+    participant ANOM as AnomalyDetector
+
+    DP->>SDP: process(image, ocr_text)
+    SDP->>DET: detect(image, ocr_text)
     
-    DET --> YOLO
-    DET --> ESTAMP
-    DET --> ANOM
+    rect rgb(26, 32, 53)
+        Note over DET: Step 1: YOLO Detection
+        DET->>YOLO: model(image, conf=0.5)
+        YOLO-->>DET: Bounding boxes + labels (stamp/sign)
+        Note over DET: Parse boxes → filter by confidence<br/>Crop each detection<br/>Check ink (HSV saturation)
+    end
     
-    subgraph "🎯 Physical Detection (YOLO)"
-        YOLO["YOLOv8 Model<br/>(best.pt)"] --> PARSE2["Parse Boxes<br/>conf ≥ 0.5"]
-        PARSE2 --> CROP["Crop Each<br/>Detection"]
-        CROP --> INK["Ink Check<br/>(HSV Saturation)"]
-        INK --> DETS["Detections[]<br/>stamp / signature"]
+    rect rgb(15, 52, 96)
+        Note over DET: Step 2: E-Stamp Classification
+        DET->>ESC: classify(image, ocr_text)
+        Note over ESC: Regex searches on OCR text:<br/>• Certificate number: IN-MH12345678901234 (+40 pts)<br/>• Stamp duty: Rs. 100 (+25 pts)<br/>• State name: Maharashtra (+15 pts)<br/>• Date: 01/01/2024 (+10 pts)
+        ESC->>QR: process(image)
+        Note over QR: 1. Try cv2.QRCodeDetector().detectAndDecode()<br/>2. If failed: contour-based finder pattern search<br/>3. If QR decoded and contains certificate → +5 pts
+        QR-->>ESC: {qr_present, qr_decoded, qr_data}
+        Note over ESC: Total score ≥ 50 → "e_stamp"<br/>Total score < 50 → "non_e_stamp"
+        ESC-->>DET: {document_type, document_fields, estamp_score}
     end
-
-    subgraph "📜 E-Stamp Classification"
-        ESTAMP["EStampClassifier"] --> EOCR["OCR Text<br/>(reused from pipeline)"]
-        ESTAMP --> QR["QR Processor<br/>OpenCV QR Code"]
-        EOCR --> ESCORE["Weighted Scoring<br/>cert=40, duty=25, state=15"]
-        QR --> ESCORE
-        ESCORE --> EDEC{"Score ≥ 50?"}
-        EDEC -->|Yes| ET["✅ e_stamp"]
-        EDEC -->|No| NT["❌ non_e_stamp"]
+    
+    rect rgb(45, 52, 54)
+        Note over DET: Step 3: Anomaly Detection
+        DET->>ANOM: detect_anomalies(detections)
+        Note over ANOM: Per-crop quality checks:<br/>• Faded? (std < 30)<br/>• Low contrast? (range < 50)<br/>• Blurry? (Laplacian < 100)
+        ANOM-->>DET: Anomaly flags per detection
     end
-
-    subgraph "🔬 Quality Checks"
-        ANOM["AnomalyDetector"] --> F1["Faded? (std &lt; 30)"]
-        ANOM --> F2["Low Contrast? (range &lt; 50)"]
-        ANOM --> F3["Blurry? (Laplacian &lt; 100)"]
-    end
-
-    DETS --> RESULT["📋 Final Result"]
-    ET --> RESULT
-    NT --> RESULT
-    F1 --> RESULT
-    F2 --> RESULT
-    F3 --> RESULT
-
-    style IMG fill:#e94560,color:#fff,stroke:none
-    style RESULT fill:#0f3460,color:#fff,stroke:none
-    style ET fill:#00b894,color:#fff,stroke:none
-    style NT fill:#636e72,color:#fff,stroke:none
+    
+    DET-->>SDP: Full stamp result
+    SDP-->>DP: Serialized JSON (numpy arrays stripped)
 ```
 
 ### E-Stamp Scoring Breakdown
 
 | Signal | Points | Detection Method |
-|---|---|---|
+|--------|--------|-----------------|
 | Certificate Number | **40** | Regex: `IN-MH12345678901234` |
-| Stamp Duty Amount | **25** | Regex: `Rs. 100` (needs context) |
+| Stamp Duty Amount | **25** | Regex: `Rs. 100` (needs context — only counted if certificate/e-stamp keyword found) |
 | State Name | **15** | Match against 22 Indian states |
 | Date | **10** | Multiple date formats |
 | QR Decoded (data) | **5** | OpenCV QRCodeDetector |
-| QR Present (visual) | **2** | Contour-based detection / detect() |
+| QR Present (visual) | **2** | Contour-based finder pattern / detect() |
 | **Threshold** | **50** | Score ≥ 50 → e-stamp confirmed |
 
 > **Context-aware:** Stamp duty, state, and date only count if a certificate number OR e-stamp keyword was already found. Prevents false positives from generic invoices.
 
-### QR Code Detection & Decoding Flow
+### Output JSON
 
-The `QRProcessor` (`app/stamp_detection/qr_processor.py`) implements a streamlined QR code detection and decoding workflow designed specifically for standard QR codes using OpenCV. It avoids external barcode or DataMatrix libraries (like pylibdmtx or pyzbar) and progressive cropping loops.
-
-```mermaid
-graph TD
-    Start["📥 Input Image"] --> Gray["Grayscale Conversion"]
-    Gray --> Decode{"1. Try OpenCV QR Decode<br/>(detectAndDecode)"}
-    
-    Decode -->|Success| Success["✅ Return QR Data<br/>(qr_present=True, qr_decoded=True)"]
-    Decode -->|Failed| Visual{"2. QR Presence Check"}
-    
-    Visual -->|"Nested Contours / detect check"| Found{"QR Present?"}
-    Found -->|Yes| Flag["⚠️ QR Detected visually but Decode Failed<br/>(qr_present=True, qr_decoded=False)"]
-    Found -->|No| None["❌ No QR Code Found<br/>(qr_present=False, qr_decoded=False)"]
-
-    style Start fill:#1a1a2e,stroke:#e94560,color:#fff
-    style Success fill:#00b894,color:#fff
-    style Flag fill:#fdcb6e,color:#000
-    style None fill:#d63031,color:#fff
+```json
+{
+  "stamp_detection": {
+    "success": true,
+    "is_estamp_document": true,
+    "document_type": "e_stamp",
+    "document_fields": {
+      "certificate_number": "IN-MH20240001234567",
+      "stamp_duty": "Rs. 500",
+      "state": "Maharashtra",
+      "date": "15/03/2024",
+      "qr_present": true,
+      "qr_decoded": true,
+      "qr_data": "https://shcilestamp.com/verify/IN-MH20240001234567",
+      "estamp_score": 87,
+      "estamp_threshold": 50
+    },
+    "physical_stamps_found": 1,
+    "signatures_found": 2,
+    "bounding_boxes": {
+      "stamps": [{"label": "stamp", "confidence": 0.92, "bbox": [100, 200, 300, 400], "ink_confirmed": true}],
+      "signatures": [{"label": "signature", "confidence": 0.87, "bbox": [500, 600, 700, 750]}],
+      "qr_codes": []
+    }
+  }
+}
 ```
-
-#### Detailed Decoding Priority
-OpenCV's `cv2.QRCodeDetector` acts as the single unified engine for both QR presence detection and payload decoding.
-
-#### OpenCV QR Presence Logic Check
-To identify the presence of a QR code even when it is too blurry or distorted to decode, the processor performs a two-layered check:
-1. **Contour-Based Finder Pattern Search:**
-   It uses adaptive thresholding and hierarchical contour scanning to locate nested square-like structures (the typical finder patterns located at three corners of a standard QR code). If at least 2 candidate finder patterns are located, the QR presence flag is raised.
-2. **OpenCV built-in detect Check:**
-   If contour analysis fails, a direct fallback to `cv2.QRCodeDetector().detect()` is performed to double check if a QR code boundary is recognized.
 
 ---
 
-## Pipeline 4: Address Verification
+## Feature 2: Signature Check
+
+**Goal:** Locate signatures in the document, distinguish them from stamps, and report presence.
+
+### What Triggers It
+
+User includes `signature` (or `stamp`) in features:
+```bash
+curl -X POST "http://localhost:8000/upload?features=signature" -F "file=@data/agreement.jpg"
+```
+
+In `document_processor.py` → `run_stamp = features is None or "stamp" in features or "signature" in features`
+
+> **Important:** Stamp and signature detection share the **same YOLO pass**. The YOLOv8 model (`best.pt`) is trained to detect both classes: `stamp` and `sign` (mapped to `signature`). Requesting either feature runs the full stamp detection pipeline.
+
+### End-to-End Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant DP as DocumentProcessor
+    participant SDP as StampDetectionPipeline
+    participant DET as StampDetector
+    participant YOLO as YOLOv8 Model
+
+    DP->>SDP: process(image, ocr_text)
+    SDP->>DET: detect(image, ocr_text)
+    
+    DET->>YOLO: model(image, conf=0.5)
+    YOLO-->>DET: Raw detections with class IDs
+
+    Note over DET: For each detection:<br/>class_id → model.names → app label<br/>"stamp" → "stamp"<br/>"sign" → "signature"
+    
+    Note over DET: Per-class confidence thresholds:<br/>Stamp: conf ≥ 0.5<br/>Signature: conf ≥ 0.5
+    
+    Note over DET: For stamps only:<br/>Crop → HSV saturation check<br/>→ ink_confirmed: true/false
+    
+    Note over DET: For all detections:<br/>AnomalyDetector checks crop quality<br/>(faded, low contrast, blurry)
+
+    DET-->>SDP: {detections: [{label: "signature", confidence: 0.89, bbox: [...]}]}
+    SDP-->>DP: Serialized result
+```
+
+### How Stamps vs Signatures Are Distinguished
+
+```mermaid
+graph LR
+    YOLO["YOLOv8 Raw Output"] --> C1{"Class = 'stamp'?"}
+    YOLO --> C2{"Class = 'sign'?"}
+    
+    C1 -->|Yes| S1["label: 'stamp'<br/>+ ink check (HSV)"]
+    C2 -->|Yes| S2["label: 'signature'<br/>no ink check"]
+    
+    S1 --> OUT["Final detections[]"]
+    S2 --> OUT
+    
+    style S1 fill:#e94560,color:#fff,stroke:none
+    style S2 fill:#0f3460,color:#fff,stroke:none
+```
+
+| Aspect | Stamp | Signature |
+|--------|-------|-----------|
+| **YOLO class** | `stamp` | `sign` (mapped to `signature`) |
+| **Ink check** | ✅ HSV saturation analysis | ❌ Not applicable |
+| **Anomaly check** | ✅ Faded/contrast/blur | ✅ Faded/contrast/blur |
+| **Threshold** | `confidence_threshold` (0.5) | `signature_confidence_threshold` (0.5) |
+
+### Output JSON
+
+```json
+{
+  "stamp_detection": {
+    "signatures_found": 2,
+    "bounding_boxes": {
+      "signatures": [
+        {"label": "signature", "confidence": 0.89, "bbox": [120, 450, 380, 520], "anomalies": []},
+        {"label": "signature", "confidence": 0.76, "bbox": [500, 800, 720, 870], "anomalies": ["faded"]}
+      ]
+    }
+  }
+}
+```
+
+---
+
+## Feature 3: Address Check
+
+**Goal:** Extract structured address from OCR text (pincode, city, state, address line). When multiple documents are submitted, compare addresses across them using fuzzy matching.
+
+### What Triggers It
+
+User includes `address` in features:
+```bash
+curl -X POST "http://localhost:8000/upload?features=address" -F "file=@data/aadhaar.jpg"
+```
+
+In `document_processor.py` → `run_address = features is None or "address" in features`
+
+### End-to-End Flow (Single Document)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant DP as DocumentProcessor
+    participant OCR as OCR Result<br/>(already extracted)
+    participant EXT as AddressExtractor
+    
+    DP->>OCR: Get formatted_result.text
+    DP->>EXT: extract_from_text(ocr_text)
+    
+    Note over EXT: 1. Extract Pincode<br/>Regex: 6-digit number (first digit 1-9)<br/>Tries "PIN Code: 400001" first, then standalone
+
+    Note over EXT: 2. Extract State<br/>Match against 32 Indian states/UTs<br/>Tries "State: Maharashtra" first, then text scan
+
+    Note over EXT: 3. Extract City<br/>Match against 45+ Indian cities<br/>Tries "City: Mumbai" first, then text scan
+
+    Note over EXT: 4. Extract Address Line<br/>Strategy: find text before pincode/city/state<br/>Tries "Address:" labeled field first<br/>Strips D/O, S/O prefixes
+
+    EXT-->>DP: {line1, city, state, pincode}
+    
+    Note over DP: Needs at least pincode OR (city + state)<br/>to return a result. Otherwise returns None.
+```
+
+### Cross-Document Address Matching (via proof_check.py)
+
+When multiple documents are submitted together, `check_address_match()` compares them:
 
 ```mermaid
 graph TB
-    subgraph "Step 1: Extract"
-        OCR2["OCR Text"] --> EXT["AddressExtractor"]
-        EXT --> PIN["Pincode<br/>6-digit regex"]
-        EXT --> STATE["State<br/>32 states list"]
-        EXT --> CITY["City<br/>45+ cities list"]
-        EXT --> LINE["Address Line<br/>Before pincode / labeled"]
-    end
+    D1["Doc 1: Aadhaar<br/>OCR Text"] --> E1["AddressExtractor<br/>{line1, city, state, pincode}"]
+    D2["Doc 2: Utility Bill<br/>OCR Text"] --> E2["AddressExtractor<br/>{line1, city, state, pincode}"]
+    D3["Doc 3: Passport<br/>OCR Text"] --> E3["AddressExtractor<br/>{line1, city, state, pincode}"]
 
-    subgraph "Step 2: Normalize"
-        PIN --> NORM["AddressNormalizer"]
-        STATE --> NORM
-        CITY --> NORM
-        LINE --> NORM
-        NORM --> N1["M.G. Rd. → Mahatma Gandhi Road"]
-        NORM --> N2["Apt. → Apartment"]
-        NORM --> N3["lowercase + clean"]
-    end
+    E1 --> MAT["AddressMatcher.compare()"]
+    E2 --> MAT
+    E3 --> MAT
 
-    subgraph "Step 3: Match"
-        N1 --> MAT["AddressMatcher"]
-        N2 --> MAT
-        N3 --> MAT
-        MAT --> P1["Pincode: Exact"]
-        MAT --> P2["State: Exact"]
-        MAT --> P3["City: Fuzzy (≥0.85)"]
-        MAT --> P4["Line1: Fuzzy + Containment"]
-    end
+    MAT --> P1["Pincode: Exact match"]
+    MAT --> P2["State: Exact match"]
+    MAT --> P3["City: Fuzzy match (≥ 0.85)"]
+    MAT --> P4["Line1: Fuzzy + Containment"]
 
-    subgraph "Step 4: Decision"
-        P1 --> DEC{"All Match?"}
-        P2 --> DEC
-        P3 --> DEC
-        P4 --> DEC
-        DEC -->|pin+state+3| MATCH["✅ MATCH"]
-        DEC -->|pin+state only| PARTIAL["⚠️ PARTIAL_MATCH"]
-        DEC -->|fail| NOMATCH["❌ NO_MATCH"]
-    end
+    P1 --> DEC{Decision}
+    P2 --> DEC
+    P3 --> DEC
+    P4 --> DEC
 
-    style OCR2 fill:#e94560,color:#fff,stroke:none
+    DEC -->|"pin+state+3 fields"| MATCH["✅ MATCH"]
+    DEC -->|"pin+state only"| PARTIAL["⚠️ PARTIAL_MATCH"]
+    DEC -->|"fail"| NOMATCH["❌ NO_MATCH"]
+
     style MATCH fill:#00b894,color:#fff,stroke:none
     style PARTIAL fill:#fdcb6e,color:#000,stroke:none
     style NOMATCH fill:#d63031,color:#fff,stroke:none
 ```
 
-### Freshness Rules
+### Output JSON (Single Document)
 
-| Document Type | Maximum Age | Notes |
-|---|---|---|
-| Utility Bill | 90 days | Electricity, water, gas, phone |
-| Bank Statement | 90 days | Account statement |
-| Rental Agreement | 180 days | Lease agreement |
-| Aadhaar / Passport / DL | 10 years | Government-issued IDs |
+```json
+{
+  "address_extraction": {
+    "line1": "Flat 302, Sai Krupa Apartments, MG Road",
+    "city": "Pune",
+    "state": "Maharashtra",
+    "pincode": "411001"
+  }
+}
+```
 
 ---
 
-## Pipeline 5: ID Proof Validation & Final Verdict
+## Feature 4: ID & Address Proof Check
+
+**Goal:** Validate extracted fields (Aadhaar checksum, PAN format, Passport format), check that required proofs are present, and cross-match name/DOB/address across documents.
+
+### What Triggers It
+
+User includes `idproof` in features:
+```bash
+curl -X POST "http://localhost:8000/upload?features=idproof" -F "file=@data/aadhaar.jpg"
+```
+
+In `document_processor.py` → `run_idproof = features is None or "idproof" in features`
+
+### End-to-End Flow (Single Document Field Validation)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant DP as DocumentProcessor
+    participant CLS as Classification Result
+    participant VAL as validate_extracted_fields()
+
+    DP->>CLS: Get doc_type + extracted_fields
+    Note over CLS: doc_type = "aadhaar_card"<br/>fields = {aadhaar_number: "2345 6789 0123", date_of_birth: "15/03/1990", pincode: "400001"}
+    
+    DP->>VAL: validate_extracted_fields("aadhaar_card", fields)
+    
+    Note over VAL: For each field, run the mapped validator:<br/><br/>aadhaar_number → validate_aadhaar()<br/>  • Strip spaces: "234567890123"<br/>  • Is 12 digits? ✅<br/>  • Starts with 2-9? ✅ (starts with 2)<br/>  • Verhoeff checksum? ✅ or ❌<br/><br/>date_of_birth → validate_date()<br/>  • Parse DD/MM/YYYY? ✅<br/>  • Not in future? ✅<br/><br/>pincode → validate_pincode()<br/>  • 6 digits, starts 1-9? ✅
+
+    VAL-->>DP: {valid: true/false, results: {field: {is_valid, reason}}}
+```
+
+### Field Validators
+
+| Document Type | Field | Validator | What It Checks |
+|--------------|-------|-----------|----------------|
+| **Aadhaar** | `aadhaar_number` | `validate_aadhaar()` | 12 digits, starts 2-9, **Verhoeff checksum** (UIDAI algorithm) |
+| **Aadhaar** | `date_of_birth` | `validate_date()` | DD/MM/YYYY format, not in future |
+| **Aadhaar** | `pincode` | `validate_pincode()` | 6 digits, starts 1-9 |
+| **PAN** | `pan_number` | `validate_pan()` | `ABCDE1234F` format, 4th char = valid holder type |
+| **PAN** | `date_of_birth` | `validate_date()` | DD/MM/YYYY format, not in future |
+| **Passport** | `passport_number` | `validate_passport()` | 1 letter + 7 digits (e.g., `L1234567`) |
+| **Passport** | `date_of_birth/issue/expiry` | `validate_date()` | DD/MM/YYYY format, not in future |
+| **Bank Statement** | `ifsc_code` | `validate_ifsc()` | 4 letters + 0 + 6 alphanumeric (e.g., `SBIN0001234`) |
+| **Utility Bill** | `bill_date/due_date` | `validate_date()` | DD/MM/YYYY format |
+
+### Cross-Document Proof Check (proof_check.py → generate_status)
+
+When multiple documents are submitted, `generate_status(docs)` runs 6 checks and produces a **PASS / REVIEW / REJECT** verdict:
 
 ```mermaid
 graph TB
     DOCS["📄 Processed Documents<br/>(Aadhaar + PAN + Utility Bill)"] --> GS["generate_status()"]
     
-    GS --> C1["1️⃣ Required Proofs<br/>≥1 ID Proof<br/>≥1 Address Proof"]
-    GS --> C2["2️⃣ Field Validation<br/>Aadhaar Checksum<br/>PAN Format<br/>Passport Format"]
+    GS --> C1["1️⃣ Required Proofs<br/>≥1 ID Proof present?<br/>≥1 Address Proof present?"]
+    GS --> C2["2️⃣ Field Validation<br/>Aadhaar Checksum OK?<br/>PAN Format OK?<br/>Passport Format OK?"]
     GS --> C3["3️⃣ Name Match<br/>Cross-document<br/>name consistency"]
     GS --> C4["4️⃣ DOB Match<br/>Cross-document<br/>date consistency"]
     GS --> C5["5️⃣ Address Match<br/>Cross-document<br/>address consistency"]
-    GS --> C6["6️⃣ Confidence<br/>Flag if<br/>&lt; 0.30"]
+    GS --> C6["6️⃣ Confidence<br/>Flag if classification<br/>confidence < 0.30"]
 
     C1 -->|Missing| REJ
     C2 -->|Invalid| REJ
@@ -452,7 +586,7 @@ graph TB
     C6 -->|OK| PASS2
 
     REJ["🔴 REJECT<br/>Auto-reject"]
-    REV["🟡 REVIEW<br/>Manual check"]
+    REV["🟡 REVIEW<br/>Manual check needed"]
     PASS2["🟢 PASS<br/>Auto-approve"]
 
     style DOCS fill:#e94560,color:#fff,stroke:none
@@ -463,41 +597,15 @@ graph TB
 
 ### Proof Categories
 
-```mermaid
-graph LR
-    subgraph "🪪 ID Proof Types"
-        I1["Aadhaar Card"]
-        I2["PAN Card"]
-        I3["Passport"]
-    end
+| Document | ID Proof? | Address Proof? |
+|----------|-----------|----------------|
+| **Aadhaar Card** | ✅ | ✅ (both!) |
+| **PAN Card** | ✅ | ❌ |
+| **Passport** | ✅ | ✅ |
+| **Utility Bill** | ❌ | ✅ |
+| **Bank Statement** | ❌ | ✅ |
 
-    subgraph "🏠 Address Proof Types"
-        A1["Aadhaar Card"]
-        A2["Passport"]
-        A3["Utility Bill"]
-        A4["Bank Statement"]
-    end
-
-    I1 -.->|"Counts as both"| A1
-
-    style I1 fill:#6c5ce7,color:#fff,stroke:none
-    style A1 fill:#6c5ce7,color:#fff,stroke:none
-```
-
-> **Aadhaar** is the only document that counts as **both** ID proof and Address proof.
-
-### Field Validators
-
-| Validator | Format | Special Check |
-|---|---|---|
-| **Aadhaar** | 12 digits, starts 2-9 | **Verhoeff checksum** (UIDAI algorithm) |
-| **PAN** | `ABCDE1234F` | 4th char must be valid holder type |
-| **Passport** | `A1234567` | 1 letter + 7 digits |
-| **Pincode** | 6 digits | Starts with 1-9 |
-| **IFSC** | `XXXX0XXXXXX` | 4 letters + 0 + 6 alphanumeric |
-| **Date** | `DD/MM/YYYY` | Must not be in future |
-
-### Verdict Decision Tree
+### Verdict Decision Logic
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -515,432 +623,58 @@ graph LR
 └──────────────────────────────────────────────────┘
 ```
 
----
+### Output JSON
 
-## Data Flow: Complete Request → Response
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant API as FastAPI /upload
-    participant DP as DocumentProcessor
-    participant PDF as PDFParser
-    participant PRE as Preprocessor
-    participant OCR as OCRPipeline
-    participant CLS as Classifier
-    participant STM as StampDetector
-    participant MIO as MinIO
-
-    C->>API: POST /upload (file bytes)
-    API->>DP: process_from_bytes(bytes, filename)
-    
-    Note over DP: Write to temp file
-    
-    alt PDF file
-        DP->>PDF: parse(pdf_path)
-        PDF-->>DP: [page1.png, page2.png, ...]
-        Note over DP: Process each page independently
-    end
-
-    DP->>PRE: load_image() + detect_blur()
-    PRE-->>DP: quality_info + preprocessed
-
-    opt MinIO enabled
-        DP->>MIO: Save original + preprocessed
-    end
-
-    DP->>OCR: run(image)
-    OCR-->>DP: {text, blocks, bboxes}
-
-    DP->>CLS: run(parsed_blocks)
-    CLS-->>DP: {doc_type, confidence, fields}
-
-    DP->>STM: process(image, ocr_text)
-    Note over STM: YOLO + E-Stamp + QR + Anomaly
-    STM-->>DP: {stamps, signatures, estamp_info}
-
-    DP-->>API: Complete result dict
-    API-->>C: JSON response
+```json
+{
+  "status": "REVIEW",
+  "reasons": ["Name mismatch: pan_card='rahul kumar' vs aadhaar_card='rahul k.'"],
+  "proofs": {"met": true, "missing": []},
+  "field_validation": [
+    {"doc_type": "aadhaar_card", "valid": true, "results": {"aadhaar_number": {"is_valid": true, "reason": ""}}},
+    {"doc_type": "pan_card", "valid": true, "results": {"pan_number": {"is_valid": true, "reason": ""}}}
+  ],
+  "name_check": {"consistent": false, "mismatches": ["Name mismatch: pan_card='rahul kumar' vs aadhaar_card='rahul k.'"]},
+  "dob_check": {"consistent": true, "mismatches": []},
+  "address_check": {"consistent": true, "issues": []}
+}
 ```
 
 ---
 
-## Shared Resource: OCR Engine
+## Combined Final Verdict
 
-```mermaid
-graph TB
-    DP["DocumentProcessor"] --> OE["OCREngine<br/>(Single Instance)"]
-    
-    OE --> OP["OCRPipeline<br/>Main text extraction"]
-    OE --> SP["StampDetectionPipeline<br/>E-stamp text analysis"]
-    
-    Note["⚡ PaddleOCR loaded ONCE<br/>Shared across pipelines<br/>Saves ~500MB memory"]
-
-    style OE fill:#e94560,color:#fff,stroke:none,stroke-width:2px
-    style Note fill:#2d3436,color:#dfe6e9,stroke:none
-```
-
----
-
-## Storage Architecture (MinIO)
-
-```
-documents/                          ← Bucket
-└── {uuid}/                         ← Per-document folder
-    ├── original/
-    │   └── aadhaar_front.jpg       ← Uploaded file as-is
-    └── preprocessed/
-        └── aadhaar_front_preprocessed.png  ← After sharpening
-```
-
----
-
-## Technology Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| **API** | FastAPI | REST endpoints |
-| **Task Queue** | Celery + Redis | Background processing for large files |
-| **Database** | PostgreSQL + SQLAlchemy | Job tracking, audit, result storage |
-| **OCR** | PaddleOCR 3.5 | Text extraction from images |
-| **Object Detection** | YOLOv8 (Ultralytics) | Stamp & signature localization |
-| **PDF Parsing** | pypdfium2 | PDF page rendering |
-| **QR Code** | OpenCV | QR detection & decoding |
-| **Image Processing** | OpenCV | Blur detection, sharpening, cropping |
-| **Object Storage** | MinIO | Original + preprocessed document images |
-| **Validation** | Pure Python | Verhoeff checksum, regex, fuzzy matching |
-
----
-
-## Program Execution Flow — Stamp Detection
-
-Below is the step-by-step program execution flow specifically for the stamp detection system when processing a document via the API or test scripts:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as Client / Test Script
-    participant API as upload.py (POST /upload)
-    participant DP as DocumentProcessor
-    participant PDF as PDFParser (pypdfium2)
-    participant PRE as Preprocessor (OpenCV)
-    participant OCR as OCRPipeline (PaddleOCR)
-    participant CLS as ClassificationPipeline
-    participant SDP as StampDetectionPipeline
-    participant DET as StampDetector (YOLOv8)
-    participant ESC as EStampClassifier
-    participant QR as QRProcessor
-
-    Client->>API: Upload File (Image/PDF bytes)
-    API->>DP: process_from_bytes(file_bytes, filename)
-    Note over DP: Write bytes to temporary file
-
-    alt File is PDF
-        DP->>PDF: parse(pdf_path)
-        PDF-->>DP: Rendered Page PNGs
-        Note over DP: Loop through each page
-    end
-
-    DP->>PRE: Preprocessing (Grayscale + Laplacian Blur Check)
-    PRE-->>DP: Preprocessed Image (Sharpened if blurry)
-
-    DP->>OCR: Run OCR (PaddleOCR)
-    OCR-->>DP: Extracted Text & Blocks
-
-    DP->>CLS: Run Document Classification
-    CLS-->>DP: Doc Type (Aadhaar/PAN/Passport...)
-
-    DP->>SDP: process(image, ocr_text)
-    
-    rect rgb(26, 32, 53)
-        note right of SDP: Stamp Detection Flow (Independent)
-        SDP->>DET: detect(image, ocr_text)
-        
-        DET->>DET: Run YOLOv8 Model (best.pt)
-        Note over DET: Detects physical 'stamps' and 'signatures'
-        
-        DET->>ESC: classify(image, ocr_text)
-        Note over ESC: Checks Certificate regex, state names, stamp duty
-        
-        ESC->>QR: Decode QR
-        QR-->>ESC: Decoded QR Data (matches certificate?)
-        ESC-->>DET: E-Stamp Score (>= 50 is e-stamp)
-        
-        DET->>DET: Run Anomaly Checks on crops (Faded / Contrast / Blur)
-        DET-->>SDP: Combined Stamp Detection Results
-    end
-
-    SDP-->>DP: Serializable JSON (stamps, signatures, anomalies, e-stamp details)
-    
-    alt File is PDF
-        Note over DP: Aggregate results across all pages
-    end
-
-    DP-->>API: Full Processing Result Dict
-    API-->>Client: Final JSON Response
-```
-
-### Flow Breakdown
-
-1. **Upload / Trigger:** The client sends the raw file bytes via `POST /upload` or triggers a local file-based script run.
-2. **Bytes Handoff:** `upload.py` reads raw bytes and forwards them to `DocumentProcessor.process_from_bytes()`.
-3. **Format Check:**
-   - **If PDF:** `PDFParser` renders pages as temporary PNGs. Each page is processed sequentially, and the final results are aggregated.
-   - **If Image:** OpenCV loads the image directly.
-4. **Image Preprocessing:** Checks for blur. If blurry, runs OpenCV sharpening (Unsharp Mask).
-5. **OCR & Document Classification:** PaddleOCR extracts text blocks, which the `ClassificationPipeline` scores to identify the document type.
-6. **Stamp Detection Core:**
-   - **YOLOv8** localizes physical stamps and signatures.
-   - **EStampClassifier** uses OCR regex rules and runs the **QRProcessor** (using OpenCV) to locate/decode QR codes. An e-stamp score >= 50 confirms it as an e-stamp.
-   - **Anomaly Detector** flags any physical detections that are faded, blurry, or low-contrast.
-7. **Aggregation & JSON Response:** Results are structured into a JSON response, removing non-serializable elements like numpy arrays, and returned to the client.
-
----
-
-## Pipeline 6: Production Upload System (Async Processing)
-
-### Why Was This Built?
-
-The original `/upload` endpoint had 4 critical problems for real-world use:
-
-| Problem | What Happened | Why It's Bad |
-|---------|--------------|-------------|
-| **Full file in RAM** | `await file.read()` loaded entire file into memory | A 100 MB PDF = 100 MB RAM instantly gone. Multiple uploads = server crash. |
-| **Blocking event loop** | `processor.process_from_bytes()` ran synchronously | YOLO + PaddleOCR takes 30-300 seconds. During this time, NO other HTTP request could be served. |
-| **No file size limit** | Anyone could upload a 2 GB file | Server would run out of memory and crash. |
-| **No timeout handling** | 50-page PDF = 5+ minutes processing | HTTP request would timeout before results were ready. Client gets an error even though processing was working. |
-
-### Architecture: Before vs After
+All 4 features combine to produce one final assessment:
 
 ```mermaid
 graph LR
-    subgraph "❌ BEFORE — Blocking"
-        C1["Client"] -->|"POST /upload<br/>(waits 30-300 sec)"| API1["FastAPI<br/>file.read() → RAM"]
-        API1 -->|"Blocks entire server"| DP1["DocumentProcessor"]
-        DP1 -->|"Response after processing"| C1
-    end
-```
-
-```mermaid
-graph TB
-    subgraph "✅ AFTER — Async with Background Workers"
-        C2["Client"] -->|"POST /upload"| API2["FastAPI<br/>Stream → Disk"]
-        API2 -->|"Instant response<br/>job_id + status=queued"| C2
-        API2 -->|"Create Job row"| PG[("PostgreSQL<br/>jobs table")]
-        API2 -->|"Dispatch task"| RD[("Redis<br/>Message Queue")]
-        RD --> W["Celery Worker<br/>Loads YOLO+PaddleOCR once<br/>Processes documents"]
-        W -->|"Update progress<br/>PREPROCESSING → OCR → ..."| PG
-        W -->|"Save final result"| PG
-        C2 -->|"GET /jobs/{id}<br/>Poll for status"| PG
+    subgraph "4 Feature Outputs"
+        F1["🔵 Stamp Check<br/>E-stamp confirmed?<br/>Physical stamps found?<br/>Anomalies?"]
+        F2["🔵 Signature Check<br/>Signatures present?<br/>Count & locations"]
+        F3["🔵 Address Check<br/>Address extracted?<br/>Cross-doc match?"]
+        F4["🔵 ID Proof Check<br/>Fields valid?<br/>Proofs present?<br/>Cross-doc consistent?"]
     end
 
-    style PG fill:#0f3460,color:#fff,stroke:none
-    style RD fill:#e94560,color:#fff,stroke:none
-    style W fill:#16213e,stroke:#0f3460,color:#fff
+    F1 --> VERDICT
+    F2 --> VERDICT
+    F3 --> VERDICT
+    F4 --> VERDICT
+
+    VERDICT{"generate_status()"}
+    VERDICT -->|All OK| CLEAR["🟢 CLEAR<br/>Everything valid"]
+    VERDICT -->|Soft issues| REVIEW["🟡 REVIEW<br/>Human review needed"]
+    VERDICT -->|Hard failures| REJECT["🔴 REJECT<br/>Hard rule failed"]
+
+    style CLEAR fill:#00b894,color:#fff,stroke:none
+    style REVIEW fill:#fdcb6e,color:#000,stroke:none
+    style REJECT fill:#d63031,color:#fff,stroke:none
 ```
 
-### Upload Flow: Step by Step
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as FastAPI /upload
-    participant Disk as Temp File (data/uploads/)
-    participant DB as PostgreSQL (jobs table)
-    participant Redis as Redis Queue
-    participant Worker as Celery Worker
-    participant DP as DocumentProcessor
-
-    Client->>API: POST /upload (file + features)
-    
-    Note over API: Validate extension (.pdf, .jpg, etc.)
-    
-    API->>Disk: Stream file in 1 MB chunks
-    Note over API,Disk: Check size during streaming<br/>Abort at 100 MB limit
-    
-    API->>DB: INSERT Job (status=queued)
-    API->>Redis: Dispatch process_document_task
-    API-->>Client: { job_id, status: "queued", poll_url }
-    
-    Note over Client: Client is FREE — no waiting
-    
-    Redis->>Worker: Pick up task
-    Worker->>DB: UPDATE status=processing, step=INITIALIZING
-    Worker->>DP: process_document(file_path, features)
-    
-    loop Each processing stage
-        DP->>Worker: progress_callback("PREPROCESSING")
-        Worker->>DB: UPDATE step=PREPROCESSING
-        DP->>Worker: progress_callback("OCR")
-        Worker->>DB: UPDATE step=OCR
-        DP->>Worker: progress_callback("STAMP_DETECTION")
-        Worker->>DB: UPDATE step=STAMP_DETECTION
-    end
-    
-    DP-->>Worker: Processing result dict
-    Worker->>DB: UPDATE status=completed, result={...}
-    Worker->>Disk: DELETE temp file (try/finally cleanup)
-    
-    Client->>API: GET /jobs/{job_id}
-    API->>DB: SELECT * FROM jobs WHERE id=job_id
-    API-->>Client: { status: "completed", result: {...} }
-```
-
-### Design Decisions & Reasoning
-
-#### 1. Stream to Disk, Not RAM
-
-**What:** File is written to `data/uploads/` in 1 MB chunks during upload, never fully loaded into memory.
-
-**Why:** A 100 MB scanned PDF loaded via `await file.read()` would instantly consume 100 MB of server RAM. With 5 concurrent uploads, that's 500 MB just for file storage — before any processing starts. Streaming to disk means the server only ever holds 1 MB in memory per upload, regardless of file size.
-
-```python
-# OLD — entire file in RAM:
-file_data = await file.read()  # 100 MB PDF = 100 MB RAM
-
-# NEW — stream to disk in chunks:
-while True:
-    chunk = await file.read(1_048_576)  # 1 MB at a time
-    if not chunk:
-        break
-    if total_size > MAX_UPLOAD_SIZE_BYTES:  # Check DURING streaming
-        raise HTTPException(413, "File too large")
-    tmp.write(chunk)
-```
-
-#### 2. 100 MB File Size Limit
-
-**What:** Size is checked during streaming — if the file exceeds 100 MB, upload is aborted immediately (partial file deleted).
-
-**Why:** Without a limit, a malicious or accidental 2 GB upload would crash the server. The limit is checked **during** streaming, not after — so a 500 MB file is rejected after the first 100 MB, not after uploading all 500 MB.
-
-#### 3. Celery + Redis for Background Processing
-
-**What:** Upload returns instantly with a `job_id`. The actual processing happens in a separate Celery worker process.
-
-**Why:** Document processing (PaddleOCR + YOLOv8) takes 30-300 seconds. If this runs inside the FastAPI request handler:
-- The HTTP request blocks for the entire duration
-- No other requests can be processed (Python GIL + synchronous processing)
-- Client-side timeouts often kill the connection before processing finishes
-
-With Celery, the FastAPI server stays responsive — it just creates a job record and returns. The heavy ML processing happens in a separate worker process.
-
-#### 4. PostgreSQL for Job Storage (Not Just Redis)
-
-**What:** Job status, progress, and final results are stored in PostgreSQL. Redis is only used as the Celery message queue.
-
-**Why:**
-- **Audit trail:** PostgreSQL keeps a permanent record of every document processed — when, what type, what result. This is required for KYC compliance.
-- **Reliability:** Redis data can be lost on restart (it's in-memory). PostgreSQL persists to disk.
-- **Query capability:** `GET /jobs?status=failed&limit=10` — you can filter, paginate, and search job history. Redis is not designed for this.
-
-#### 5. Lazy Model Loading in Workers
-
-**What:** PaddleOCR and YOLOv8 are loaded **once** when the first task runs, not on every task.
-
-**Why:** Loading PaddleOCR takes ~5 seconds and uses ~500 MB RAM. Loading YOLOv8 takes ~2 seconds. If we loaded them per-task, every document would have a 7-second overhead. With lazy loading, the models are loaded once and reused for all subsequent tasks.
-
-```python
-_processor = None  # Module-level singleton
-
-def _get_processor(use_minio=False):
-    global _processor
-    if _processor is None:  # Only loads models on FIRST call
-        _processor = DocumentProcessor(use_minio=use_minio)
-    return _processor
-```
-
-#### 6. Feature Selection
-
-**What:** Clients can specify which analysis steps to run via `?features=stamp,address`.
-
-**Why:** Not every use case needs all checks. If you only need to verify an address, running YOLO stamp detection wastes 10+ seconds. Feature selection lets the client skip unnecessary steps:
-
-| Feature | What It Runs | Time Saved If Skipped |
-|---------|-------------|----------------------|
-| `stamp` | YOLOv8 + E-stamp classifier + anomaly detection | ~10-15 sec |
-| `signature` | Same YOLO pass as stamp (detects both) | ~10-15 sec |
-| `address` | Address extraction from OCR text | ~1 sec |
-| `idproof` | Field validation (Aadhaar checksum, PAN format) | ~0.5 sec |
-
-> OCR and Classification **always run** — they are required by all other features.
-
-#### 7. Progress Stages
-
-**What:** The worker reports its current stage to PostgreSQL as it processes:
-
-```
-INITIALIZING → PREPROCESSING → OCR → STAMP_DETECTION →
-SIGNATURE_DETECTION → ADDRESS_CHECK → ID_PROOF_CHECK → FINALIZING
-```
-
-**Why:** When processing a 50-page PDF (which can take 5+ minutes), the client needs to know if the job is still running or stuck. Without progress reporting, the client can only see "processing" and has no idea if it will take 10 more seconds or 5 more minutes.
-
-#### 8. `task_acks_late = True` + `task_reject_on_worker_lost = True`
-
-**What:** Celery only acknowledges a task AFTER it completes. If a worker crashes mid-processing, the task is automatically re-queued.
-
-**Why:** Without this, if a worker runs out of memory during YOLO inference and crashes, the task is marked as "acknowledged" (started) and never retried. The job would be stuck in "processing" forever. With late acknowledgment, crashed tasks are automatically picked up by another worker.
-
-#### 9. `worker_prefetch_multiplier = 1`
-
-**What:** Each Celery worker only grabs 1 task at a time from the queue.
-
-**Why:** Document processing is CPU/GPU-heavy. If a worker prefetches 4 tasks but can only process 1 at a time, the other 3 sit idle in that worker's local buffer — even if other workers are free. With `prefetch_multiplier=1`, tasks are distributed fairly across all available workers.
-
-#### 10. `?sync=true` Backward Compatibility
-
-**What:** Adding `?sync=true` to the upload request makes it behave like the old blocking API — processes immediately and returns the full result.
-
-**Why:** Existing test scripts and local development workflows rely on the immediate response. The sync mode preserves this behavior without requiring any changes to existing code.
-
-### API Endpoints (Updated)
-
-| Method | Path | Purpose |
-|--------|------|--------|
-| `POST` | `/upload` | Upload document → returns `job_id` (async) |
-| `POST` | `/upload?sync=true` | Upload document → returns result (blocking, for testing) |
-| `POST` | `/upload?features=stamp,address` | Upload with specific feature selection |
-| `GET` | `/jobs/{job_id}` | Poll job status + get result when completed |
-| `GET` | `/jobs` | List recent jobs (filterable by status) |
-| `POST` | `/classify` | Classify text without image upload |
-| `GET` | `/` | Health check |
-
-### Job Lifecycle in PostgreSQL
-
-```mermaid
-stateDiagram-v2
-    [*] --> queued : POST /upload
-    queued --> processing : Celery worker picks up task
-    
-    state processing {
-        INITIALIZING --> PREPROCESSING
-        PREPROCESSING --> OCR
-        OCR --> STAMP_DETECTION
-        STAMP_DETECTION --> SIGNATURE_DETECTION
-        SIGNATURE_DETECTION --> ADDRESS_CHECK
-        ADDRESS_CHECK --> ID_PROOF_CHECK
-        ID_PROOF_CHECK --> FINALIZING
-    }
-    
-    processing --> completed : All steps successful
-    processing --> failed : Exception thrown
-    completed --> [*]
-    failed --> [*]
-```
-
-### Celery Worker Configuration
-
-| Setting | Value | Reason |
-|---------|-------|--------|
-| `worker_prefetch_multiplier` | 1 | Fair task distribution (1 task at a time) |
-| `task_acks_late` | True | Acknowledge after completion (crash recovery) |
-| `task_reject_on_worker_lost` | True | Re-queue task if worker crashes |
-| `task_time_limit` | 600 sec | Hard kill after 10 minutes (prevent stuck tasks) |
-| `task_soft_time_limit` | 540 sec | Graceful timeout at 9 minutes |
-| `worker_max_memory_per_child` | 2 GB | Restart worker if memory exceeds 2 GB |
-| `concurrency` | 2 | 2 parallel workers (each uses ~1.5 GB for ML models) |
+| Verdict | Trigger | Example |
+|---------|---------|---------|
+| **🟢 CLEAR** | All proofs present + all fields valid + no mismatches | Aadhaar checksum OK, PAN format OK, names match, addresses match |
+| **🟡 REVIEW** | Soft issues — data present but inconsistent | Name on PAN ≠ name on Aadhaar, or classification confidence < 30% |
+| **🔴 REJECT** | Hard failures — missing or invalid data | Missing ID proof, Aadhaar checksum failed, invalid PAN format |
 
 ---
 
@@ -962,11 +696,6 @@ psql -U postgres -c "CREATE DATABASE intellicheck;"
 ```
 
 Default connection string: `postgresql://postgres:postgres@localhost:5432/intellicheck`
-
-To use a different connection, set environment variable:
-```bash
-set DATABASE_URL=postgresql://user:password@host:5432/dbname
-```
 
 > **Note:** Tables are auto-created when FastAPI starts — no manual schema setup needed.
 
@@ -993,35 +722,24 @@ celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 uvicorn app.main:app --reload
 ```
 
-### Step 4 (Optional): Start MinIO
+### Step 4: Upload & Check
 
 ```bash
-# ── Terminal 4: MinIO (only needed if you want document storage) ──
-.\minio.exe server minio-data
-```
-
-### Step 5: Open Swagger UI
-
-Open in browser: **http://127.0.0.1:8000/docs**
-
-### Usage Examples
-
-```bash
-# Async upload (large files — returns job_id instantly)
+# Async upload (returns job_id instantly)
 curl -X POST http://localhost:8000/upload -F "file=@data/estamp2.pdf"
-# Response: { "job_id": "abc-123", "status": "queued", "poll_url": "/jobs/abc-123" }
+# → { "job_id": "abc-123", "status": "queued", "poll_url": "/jobs/abc-123" }
 
 # Poll for results
 curl http://localhost:8000/jobs/abc-123
-# Response: { "status": "processing", "step": "OCR" }
+# → { "status": "processing", "step": "OCR" }
 # ... wait ...
-# Response: { "status": "completed", "result": { ... full result ... } }
+# → { "status": "completed", "result": { ... full result ... } }
 
-# Sync upload (small files / testing — blocks until done)
+# Sync upload (blocks until done — for small files / testing)
 curl -X POST "http://localhost:8000/upload?sync=true" -F "file=@data/sample.webp"
 
 # Feature selection (only run specific checks)
-curl -X POST "http://localhost:8000/upload?features=stamp,signature" -F "file=@data/sample.webp"
+curl -X POST "http://localhost:8000/upload?features=stamp,signature" -F "file=@data/agreement.jpg"
 curl -X POST "http://localhost:8000/upload?features=address,idproof" -F "file=@data/aadhaar.jpg"
 
 # List all completed jobs
@@ -1030,7 +748,7 @@ curl "http://localhost:8000/jobs?status=completed&limit=10"
 
 ### Running Without Celery/Redis/PostgreSQL (Local Testing)
 
-The existing CLI scripts still work without any of the new infrastructure:
+The existing CLI scripts still work without any infrastructure:
 
 ```bash
 # These scripts directly call DocumentProcessor — no Celery/Redis/PG needed:
@@ -1039,5 +757,14 @@ python tests/stamp_detection/test_stamp_detector_simple.py
 python tests/test_document_verification.py
 ```
 
-The `?sync=true` API mode also works without Celery (but still needs PostgreSQL for the FastAPI startup table check — this can be skipped if PG is not running, a warning is logged but the server still starts).
+### API Endpoints
 
+| Method | Path | Purpose |
+|--------|------|--------|
+| `POST` | `/upload` | Upload document → returns `job_id` (async) |
+| `POST` | `/upload?sync=true` | Upload document → returns result (blocking, for testing) |
+| `POST` | `/upload?features=stamp,address` | Upload with specific feature selection |
+| `GET` | `/jobs/{job_id}` | Poll job status + get result when completed |
+| `GET` | `/jobs` | List recent jobs (filterable by status) |
+| `POST` | `/classify` | Classify text without image upload |
+| `GET` | `/` | Health check |
