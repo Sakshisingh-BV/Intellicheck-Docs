@@ -18,6 +18,8 @@ from app.document_parsing import PDFParser
 from app.pipelines.ocr_pipeline import OCRPipeline
 from app.pipelines.classification_pipeline import ClassificationPipeline
 from app.pipelines.stamp_detection_pipeline import StampDetectionPipeline
+from app.address_verification.extractor import AddressExtractor
+from app.validation.validators import validate_extracted_fields
 
 logger = logging.getLogger(__name__)
 
@@ -223,35 +225,17 @@ class DocumentProcessor:
             if run_address:
                 if progress_callback:
                     progress_callback("ADDRESS_CHECK")
-                logger.info(f"Running address extraction for {doc_id}")
-                try:
-                    from app.address_verification.extractor import AddressExtractor
-
-                    ocr_text = formatted_result.get("text", "")
-                    extracted_address = AddressExtractor.extract_from_text(ocr_text)
-                    result["address_extraction"] = extracted_address or {}
-                except Exception as addr_err:
-                    logger.warning(f"Address extraction failed for {doc_id}: {addr_err}")
-                    result["address_extraction"] = {"error": str(addr_err)}
+                result["address_extraction"] = self._run_address_extraction(
+                    doc_id, formatted_result
+                )
 
             # ── Step 6: ID Proof Field Validation (conditional) ──
             if run_idproof:
                 if progress_callback:
                     progress_callback("ID_PROOF_CHECK")
-                logger.info(f"Running field validation for {doc_id}")
-                try:
-                    from app.validation.validators import validate_extracted_fields
-
-                    doc_type = classification_result.document_type
-                    fields = classification_result.extracted_fields
-                    if fields:
-                        validation = validate_extracted_fields(doc_type, fields)
-                        result["field_validation"] = validation
-                    else:
-                        result["field_validation"] = {"valid": True, "results": {}}
-                except Exception as val_err:
-                    logger.warning(f"Field validation failed for {doc_id}: {val_err}")
-                    result["field_validation"] = {"valid": False, "error": str(val_err)}
+                result["field_validation"] = self._run_field_validation(
+                    doc_id, classification_result
+                )
 
             result["status"] = "completed"
 
@@ -514,6 +498,38 @@ class DocumentProcessor:
 
         except Exception as e:
             logger.warning(f"Failed to save visualization: {e}")
+
+    # ------------------------------------------------------------------
+    # Modular pipeline step helpers
+    # ------------------------------------------------------------------
+
+    def _run_address_extraction(
+        self, doc_id: str, formatted_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract address from OCR text. Isolated for testability."""
+        logger.info(f"Running address extraction for {doc_id}")
+        try:
+            ocr_text = formatted_result.get("text", "")
+            extracted_address = AddressExtractor.extract_from_text(ocr_text)
+            return extracted_address or {}
+        except Exception as addr_err:
+            logger.warning(f"Address extraction failed for {doc_id}: {addr_err}")
+            return {"error": str(addr_err)}
+
+    def _run_field_validation(
+        self, doc_id: str, classification_result
+    ) -> Dict[str, Any]:
+        """Validate extracted fields against doc-type rules. Isolated for testability."""
+        logger.info(f"Running field validation for {doc_id}")
+        try:
+            doc_type = classification_result.document_type
+            fields = classification_result.extracted_fields
+            if fields:
+                return validate_extracted_fields(doc_type, fields)
+            return {"valid": True, "results": {}}
+        except Exception as val_err:
+            logger.warning(f"Field validation failed for {doc_id}: {val_err}")
+            return {"valid": False, "error": str(val_err)}
 
     def process_from_bytes(
         self,

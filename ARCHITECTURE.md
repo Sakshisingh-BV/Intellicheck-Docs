@@ -33,7 +33,8 @@ graph TB
         direction TB
         FV["Field Validators\nAadhaar · PAN · Passport\nVerhoeff Checksum"]
         AV["Address Verification\nExtract · Normalize\nFuzzy Match"]
-        PC["Proof Check\nCross-Document\nPASS / REVIEW / REJECT"]
+        CV["Cross-Validation\nName · DOB · Address · ID\nConsistency Checks"]
+        PC["Proof Check\nOrchestrates Validators\nPASS / REVIEW / REJECT"]
     end
 
     subgraph Output
@@ -48,6 +49,7 @@ graph TB
     DP --> STM
     PC --> FV
     PC --> AV
+    PC --> CV
     DP --> JSON
     DP --> VIZ
 
@@ -108,7 +110,8 @@ app/
 │
 ├── validation/
 │   ├── validators.py                    ← Aadhaar, PAN, Passport, IFSC validators
-│   └── proof_check.py                   ← Cross-doc verification → PASS/REVIEW/REJECT
+│   ├── cross_validation.py              ← Cross-document consistency (name/DOB/address/ID)
+│   └── proof_check.py                   ← Orchestrates validators + cross-validation → verdict
 │
 ├── pipelines/
 │   ├── ocr_pipeline.py                  ← OCR orchestration
@@ -132,8 +135,9 @@ tests/
 ├── preprocessing/                       ← Preprocessing tests
 ├── stamp_detection/                     ← Stamp detection tests
 ├── test_document_verification.py        ← Cross-document verification tests
+├── test_cross_validation.py             ← Cross-validation module unit tests
 ├── test_pdf_processing.py               ← PDF processing tests
-├── test_validation.py                   ← Field validation tests
+├── test_validation.py                   ← Field validation + proof check tests
 └── debug_pipeline.py                    ← Pipeline debugging script
 ```
 
@@ -433,16 +437,20 @@ graph TB
     
     GS --> C1["1️⃣ Required Proofs\n≥1 ID Proof\n≥1 Address Proof"]
     GS --> C2["2️⃣ Field Validation\nAadhaar Checksum\nPAN Format\nPassport Format"]
-    GS --> C3["3️⃣ Name Match\nCross-document\nname consistency"]
-    GS --> C4["4️⃣ DOB Match\nCross-document\ndate consistency"]
-    GS --> C5["5️⃣ Address Match\nCross-document\naddress consistency"]
-    GS --> C6["6️⃣ Confidence\nFlag if\n&lt; 0.30"]
+    GS --> CV["3️⃣ Cross-Validation\ncross_validate_documents()"]
+    GS --> C6["4️⃣ Confidence\nFlag if\n&lt; 0.30"]
+
+    CV --> C3["Name Match"]
+    CV --> C4["DOB Match"]
+    CV --> C5["Address Match"]
+    CV --> C7["Document ID Match"]
 
     C1 -->|Missing| REJ
     C2 -->|Invalid| REJ
     C3 -->|Mismatch| REV
     C4 -->|Mismatch| REV
     C5 -->|Mismatch| REV
+    C7 -->|Mismatch| REV
     C6 -->|Low| REV
     
     C1 -->|OK| PASS2
@@ -450,6 +458,7 @@ graph TB
     C3 -->|OK| PASS2
     C4 -->|OK| PASS2
     C5 -->|OK| PASS2
+    C7 -->|OK| PASS2
     C6 -->|OK| PASS2
 
     REJ["🔴 REJECT\nAuto-reject"]
@@ -457,6 +466,7 @@ graph TB
     PASS2["🟢 PASS\nAuto-approve"]
 
     style DOCS fill:#e94560,color:#fff,stroke:none
+    style CV fill:#0f3460,stroke:#e94560,color:#fff,stroke-width:2px
     style REJ fill:#d63031,color:#fff,stroke:none,stroke-width:2px
     style REV fill:#fdcb6e,color:#000,stroke:none,stroke-width:2px
     style PASS2 fill:#00b894,color:#fff,stroke:none,stroke-width:2px
@@ -507,9 +517,12 @@ graph LR
 │  Missing ID/Address proof?     ──YES──→  REJECT  │
 │  Invalid field (checksum)?     ──YES──→  REJECT  │
 │  ─────────────────────────────────────────────── │
-│  Name mismatch across docs?    ──YES──→  REVIEW  │
-│  DOB mismatch across docs?     ──YES──→  REVIEW  │
-│  Address mismatch across docs? ──YES──→  REVIEW  │
+│  ┌─ cross_validate_documents(docs) ───────────┐ │
+│  │  Name mismatch?             ──YES──→ REVIEW │ │
+│  │  DOB mismatch?              ──YES──→ REVIEW │ │
+│  │  Address mismatch?          ──YES──→ REVIEW │ │
+│  │  Document ID mismatch?      ──YES──→ REVIEW │ │
+│  └────────────────────────────────────────────┘ │
 │  Low classification confidence?──YES──→  REVIEW  │
 │  ─────────────────────────────────────────────── │
 │  Everything OK?                ──YES──→  PASS    │

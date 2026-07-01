@@ -347,7 +347,7 @@ class TestGenerateStatus:
 
     def test_review_low_confidence(self):
         docs = [
-            _make_doc("aadhaar_card", confidence=0.3),
+            _make_doc("aadhaar_card", confidence=0.25),
             _make_doc("pan_card", confidence=0.9),
         ]
         result = generate_status(docs)

@@ -143,7 +143,7 @@ The script prompts for:
 | **Document Classification** | Identifies document type (Aadhaar, PAN, Passport, etc.) with confidence score |
 | **Address Verification** | Compares OCR-extracted addresses against customer address |
 | **Field Validation** | Validates Aadhaar checksum, PAN format, passport number, dates |
-| **Cross-Document Checks** | Verifies name, DOB, and address consistency across documents |
+| **Cross-Document Checks** | Verifies name, DOB, address, and document ID consistency across documents (`cross_validation.py`) |
 | **Proof Requirements** | Checks that at least one ID proof and one address proof are provided |
 
 ### Verdicts
